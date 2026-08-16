@@ -105,6 +105,56 @@ _ENV_MAP: dict[str, str] = {
     "alert.consecutive_loss_days": "ALERT_CONSECUTIVE_LOSS_DAYS",
 }
 
+# 各服务商可选模型版本（用于前端下拉选择）
+MODEL_OPTIONS: dict[str, list[str]] = {
+    "deepseek": [
+        "deepseek-chat",
+        "deepseek-reasoner",
+    ],
+    "qwen": [
+        "qwen-plus",
+        "qwen-turbo",
+        "qwen-max",
+        "qwen-long",
+        "qwen2.5-72b-instruct",
+        "qwen3-32b",
+        "qwen2.5-vl-72b-instruct",
+    ],
+    "moonshot": [
+        "moonshot-v1-8k",
+        "moonshot-v1-32k",
+        "moonshot-v1-128k",
+        "kimi-latest",
+        "kimi-k2-0711-preview",
+    ],
+    "glm": [
+        "glm-4-plus",
+        "glm-4-air",
+        "glm-4-flash",
+        "glm-4-long",
+        "glm-4v-plus",
+        "glm-4.5",
+        "glm-4.5-air",
+    ],
+    "ollama": [
+        "qwen2.5:7b",
+        "qwen3:8b",
+        "qwen2.5:14b",
+        "llama3.1:8b",
+        "deepseek-r1:7b",
+        "glm4:9b",
+        "yi:6b",
+    ],
+    "openai": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+        "o3-mini",
+        "o1",
+    ],
+}
+
 # 需要打码展示的敏感 key
 _SECRET_KEYS = {"llm.default_provider", "llm.max_tokens"}
 
@@ -201,16 +251,18 @@ class ConfigStore:
             val = vals.get(key, default)
             if _is_secret(key):
                 val = self.mask(val)
-            out.append(
-                {
-                    "key": key,
-                    "category": cat,
-                    "description": desc,
-                    "value": val,
-                    "default": default,
-                    "secret": _is_secret(key),
-                }
-            )
+            item = {
+                "key": key,
+                "category": cat,
+                "description": desc,
+                "value": val,
+                "default": default,
+                "secret": _is_secret(key),
+            }
+            if key.startswith("llm.") and key.endswith("_model"):
+                provider = key.split(".")[1][: -len("_model")]
+                item["options"] = MODEL_OPTIONS.get(provider, [])
+            out.append(item)
         return out
 
 

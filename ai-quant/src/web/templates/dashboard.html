@@ -416,7 +416,6 @@ function renderConfigGroups(c) {
   Object.keys(groups).forEach(cat => {
     html += `<div class="cfg-group"><h3>${CAT_NAMES[cat] || cat}</h3>`;
     groups[cat].forEach(item => {
-      const isProvider = item.key.match(/llm\.(\w+)_api_key/);
       let control = '';
       if (item.key === 'llm.default_provider') {
         control = `<select id="cfg_${item.key}">` +
@@ -425,6 +424,14 @@ function renderConfigGroups(c) {
           '</select>';
       } else if (item.key === 'evolution.enable_crossover') {
         control = `<select id="cfg_${item.key}"><option value="true" ${item.value==='true'?'selected':''}>开启</option><option value="false" ${item.value!=='true'?'selected':''}>关闭</option></select>`;
+      } else if (item.options && item.options.length > 0) {
+        const known = item.options.includes(item.value);
+        const opts = item.options.map(o =>
+          `<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('');
+        const customSel = known ? '' : ' selected';
+        control = `<select id="cfg_${item.key}" onchange="modelSelectChanged('${item.key}')">${opts}` +
+          `<option value="__custom__"${customSel}>自定义…</option></select>` +
+          `<input id="cfg_custom_${item.key}" type="text" ${known?'style="display:none"':''} placeholder="输入自定义模型名" value="${known?'' : escapeHtml(item.value)}" style="margin-top:6px">`;
       } else {
         control = `<input id="cfg_${item.key}" type="text" value="${escapeHtml(item.value)}" placeholder="${escapeHtml(item.default||'')}">`;
       }
@@ -436,6 +443,15 @@ function renderConfigGroups(c) {
   document.getElementById('configGroups').innerHTML = html;
 }
 
+function modelSelectChanged(key) {
+  const sel = document.getElementById('cfg_' + key);
+  const input = document.getElementById('cfg_custom_' + key);
+  if (!sel || !input) return;
+  const custom = sel.value === '__custom__';
+  input.style.display = custom ? '' : 'none';
+  if (custom && !input.value) input.focus();
+}
+
 async function saveConfig() {
   const btn = document.getElementById('btnSaveConfig');
   btn.disabled = true;
@@ -443,7 +459,14 @@ async function saveConfig() {
   const updates = {};
   (configData?.schema || []).forEach(item => {
     const el = document.getElementById('cfg_' + item.key);
-    if (el) updates[item.key] = el.value.trim();
+    if (el) {
+      let v = el.value.trim();
+      if (v === '__custom__') {
+        const customEl = document.getElementById('cfg_custom_' + item.key);
+        v = customEl ? customEl.value.trim() : '';
+      }
+      updates[item.key] = v;
+    }
   });
   try {
     const r = await api('/api/config', {
