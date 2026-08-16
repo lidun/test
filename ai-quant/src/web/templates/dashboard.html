@@ -63,6 +63,14 @@ pre.report-body{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,mon
 .cfg-item label .desc{color:var(--muted);font-weight:400}
 .cfg-item input,.cfg-item select{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
 .cfg-item input:focus,.cfg-item select:focus{outline:none;border-color:var(--primary)}
+.cfg-model-row{display:flex;gap:8px;align-items:flex-start}
+.cfg-model-row select{flex:1}
+.cfg-refresh{flex-shrink:0;padding:8px 12px;border:1px solid #ddd;border-radius:6px;background:#f8fafc;color:#475569;font-size:12px;cursor:pointer;white-space:nowrap}
+.cfg-refresh:hover{background:#eef2f7;border-color:#cbd5e1}
+.cfg-refresh:disabled{opacity:.6;cursor:wait}
+.cfg-refresh.ok{border-color:#22c55e;color:#16a34a;background:#f0fdf4}
+.cfg-refresh.err{border-color:#ef4444;color:#dc2626;background:#fef2f2}
+.cfg-refresh-note{font-size:11px;color:var(--muted);margin-top:5px;min-height:14px}
 .report-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .tab-badge{display:inline-block;padding:4px 14px;border-radius:20px;border:1px solid #ddd;cursor:pointer;font-size:13px;color:#666}
 .tab-badge.active{background:var(--primary);color:#fff;border-color:var(--primary)}
@@ -425,13 +433,17 @@ function renderConfigGroups(c) {
       } else if (item.key === 'evolution.enable_crossover') {
         control = `<select id="cfg_${item.key}"><option value="true" ${item.value==='true'?'selected':''}>开启</option><option value="false" ${item.value!=='true'?'selected':''}>关闭</option></select>`;
       } else if (item.options && item.options.length > 0) {
+        const provider = item.key.split('.')[1].replace('_model', '');
         const known = item.options.includes(item.value);
         const opts = item.options.map(o =>
           `<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('');
         const customSel = known ? '' : ' selected';
-        control = `<select id="cfg_${item.key}" onchange="modelSelectChanged('${item.key}')">${opts}` +
+        control = `<div class="cfg-model-row">` +
+          `<select id="cfg_${item.key}" onchange="modelSelectChanged('${item.key}')">${opts}` +
           `<option value="__custom__"${customSel}>自定义…</option></select>` +
-          `<input id="cfg_custom_${item.key}" type="text" ${known?'style="display:none"':''} placeholder="输入自定义模型名" value="${known?'' : escapeHtml(item.value)}" style="margin-top:6px">`;
+          `<button type="button" class="cfg-refresh" onclick="fetchRemoteModels('${provider}', '${item.key}')">服务器模型</button></div>` +
+          `<input id="cfg_custom_${item.key}" type="text" ${known?'style="display:none"':''} placeholder="输入自定义模型名" value="${known?'' : escapeHtml(item.value)}" style="margin-top:6px;width:calc(100% - 130px)">` +
+          `<div id="cfg_note_${item.key}" class="cfg-refresh-note"></div>`;
       } else {
         control = `<input id="cfg_${item.key}" type="text" value="${escapeHtml(item.value)}" placeholder="${escapeHtml(item.default||'')}">`;
       }
@@ -450,6 +462,45 @@ function modelSelectChanged(key) {
   const custom = sel.value === '__custom__';
   input.style.display = custom ? '' : 'none';
   if (custom && !input.value) input.focus();
+}
+
+async function fetchRemoteModels(provider, key) {
+  const sel = document.getElementById('cfg_' + key);
+  const note = document.getElementById('cfg_note_' + key);
+  if (!sel || !note) return;
+  const btn = sel.parentElement?.querySelector('.cfg-refresh');
+  const prevText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.className = 'cfg-refresh'; btn.textContent = '加载中…'; }
+  note.textContent = '';
+  try {
+    const res = await fetch('/api/llm/remote-models?provider=' + encodeURIComponent(provider));
+    const data = await res.json();
+    if (data.error) {
+      note.textContent = '获取失败：' + data.error;
+      if (btn) btn.className = 'cfg-refresh err';
+    } else {
+      const all = [...new Set([...(data.models || []), ...(data.preset || [])])];
+      if (!all.length) {
+        note.textContent = '服务器未返回任何模型';
+        if (btn) btn.className = 'cfg-refresh err';
+      } else {
+        const current = sel.value;
+        const known = current !== '__custom__' ? current : '';
+        if (known && !all.includes(known)) all.unshift(known);
+        sel.innerHTML = all.map(m =>
+          `<option value="${m}" ${m===known?'selected':''}>${m}</option>`).join('') +
+          `<option value="__custom__">自定义…</option>`;
+        const cnt = data.models ? data.models.length : 0;
+        note.textContent = cnt > 0 ? `已从服务器获取 ${cnt} 个模型` : '已合并预设模型列表';
+        if (btn) btn.className = 'cfg-refresh ok';
+      }
+    }
+  } catch (e) {
+    note.textContent = '请求失败：' + (e.message || e);
+    if (btn) btn.className = 'cfg-refresh err';
+  } finally {
+    if (btn) { btn.disabled = false; if (btn.className.indexOf('err') < 0 && btn.className.indexOf('ok') < 0) btn.textContent = prevText; }
+  }
 }
 
 async function saveConfig() {

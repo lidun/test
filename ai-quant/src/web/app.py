@@ -271,6 +271,22 @@ async def api_llm_providers():
     )
 
 
+@app.get("/api/llm/remote-models")
+async def api_llm_remote_models(provider: str = "deepseek"):
+    """从已配置服务器拉取全部可用模型（OpenAI 兼容 /models 或 Ollama /api/tags）"""
+    from src.core.config_store import MODEL_OPTIONS, fetch_remote_models
+
+    models, error = fetch_remote_models(provider)
+    return SafeJSONResponse(
+        {
+            "provider": provider,
+            "models": models,
+            "preset": MODEL_OPTIONS.get(provider, []),
+            "error": error,
+        }
+    )
+
+
 # ---------------- 系统配置 ----------------
 @app.get("/api/config")
 async def api_config():

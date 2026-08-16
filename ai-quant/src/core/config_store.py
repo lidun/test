@@ -8,6 +8,7 @@ from __future__ import annotations
 import os as _os
 from pathlib import Path
 
+import requests
 from loguru import logger
 from sqlalchemy import text
 
@@ -268,6 +269,40 @@ class ConfigStore:
 
 def os_getenv(name: str) -> str:
     return _os.getenv(name, "")
+
+
+def fetch_remote_models(provider: str, timeout: int = 15) -> tuple[list[str], str | None]:
+    """从已配置的服务器拉取全部可用模型
+
+    返回 (模型id列表, 错误信息)。OpenAI 兼容端点用 /models；
+    Ollama 用原生 /api/tags（自动去掉 base_url 的 /v1 后缀）。
+    """
+    cfg = ConfigStore().get_all()
+    base = (cfg.get(f"llm.{provider}_base_url", "") or "").strip().rstrip("/")
+    api_key = (cfg.get(f"llm.{provider}_api_key", "") or "").strip()
+    if not base:
+        return [], "该服务商未配置 Base URL"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        if provider == "ollama":
+            root = base[: -len("/v1")] if base.endswith("/v1") else base
+            resp = requests.get(f"{root}/api/tags", timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+            return models, None
+        resp = requests.get(f"{base}/models", headers=headers, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+        return models, None
+    except requests.exceptions.HTTPError as e:
+        detail = f"HTTP {e.response.status_code}: {e.response.text[:120]}" if e.response is not None else str(e)
+        return [], detail
+    except Exception as e:
+        return [], str(e)
 
 
 def get_llm_overrides() -> dict:
