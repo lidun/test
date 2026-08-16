@@ -17,6 +17,16 @@ This file records user instructions, preferences, and teachings for reference in
 
 [Project Knowledge Summary]
 - Date: 2026-08-16
+- Context: Discovered by Agent while 实现系统配置界面与日报/周报/月报功能
+- Category: Build Methods / Troubleshooting & Debugging
+- Instructions:
+  - 配置管理：system_config 表（KV）+ .env 双写；LLM 配置保存即生效（factory 每次从 DB 读覆盖，app.py PUT /api/config 重建 generator.client）；系统运行时间配置需重启调度器生效（main.py start_scheduler 从 ConfigStore 读取）。
+  - .gitignore 坑：`data/` 模式会误匹配任意层级 `src/data/` 目录，导致数据层源码从未被提交；须用 `/data/` 限定根目录。已修复并补提交。
+  - 报告：report_history 表存报告，`POST /api/reports/generate?type=daily|weekly|monthly` 生成，前端「报告」Tab 查看/生成。
+  - Web 认证：GET 全放行；/api/config、/api/reports、/api/evolution 写操作放行（便于预览）；其余写操作需 Basic 认证。
+
+[Project Knowledge Summary]
+- Date: 2026-08-16
 - Context: Discovered by Agent while接入 FTShare（非凸科技）免费数据源
 - Category: Environment Configuration / Troubleshooting & Debugging
 - Instructions:
