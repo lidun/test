@@ -47,9 +47,15 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------- 基础认证 ----------------
+# 页面与功能 API（配置/报告/进化/健康）免认证便于浏览器直接预览；
+# 其余写操作仍需 Basic 认证。
 @app.middleware("http")
 async def require_auth(request: StarletteRequest, call_next):
-    if request.url.path == "/api/health":
+    if request.method == "GET":
+        return await call_next(request)
+    if request.url.path.startswith(
+        ("/api/config", "/api/reports", "/api/evolution", "/api/health")
+    ):
         return await call_next(request)
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Basic "):
@@ -233,6 +239,22 @@ async def api_trigger_evolution():
     return SafeJSONResponse(summary)
 
 
+# ---------------- 报告 API ----------------
+@app.get("/api/reports")
+async def api_reports(report_type: str | None = None, limit: int = 20):
+    reporter = ctx().reporter
+    return SafeJSONResponse(reporter.history(report_type=report_type, limit=limit))
+
+
+@app.post("/api/reports/generate")
+async def api_reports_generate(report_type: str = "daily"):
+    if report_type not in ("daily", "weekly", "monthly"):
+        raise HTTPException(status_code=400, detail="report_type 必须为 daily/weekly/monthly")
+    report = ctx().reporter.generate_full_report(report_type, save=True)
+    latest = ctx().reporter.history(report_type=report_type, limit=1)
+    return SafeJSONResponse({"content": report, "latest": latest[0] if latest else None})
+
+
 @app.get("/api/llm/providers")
 async def api_llm_providers():
     cfg = config.llm
@@ -247,6 +269,52 @@ async def api_llm_providers():
             "generator_available": ctx().generator.available if ctx().generator else False,
         }
     )
+
+
+# ---------------- 系统配置 ----------------
+@app.get("/api/config")
+async def api_config():
+    from src.core.config_store import ConfigStore
+
+    store = ConfigStore()
+    return SafeJSONResponse(
+        {
+            "schema": store.describe_all(),
+            "categories": ["llm", "system", "data", "evolution", "strategy", "alert"],
+            "category_names": {
+                "llm": "大模型配置",
+                "system": "系统运行时间",
+                "data": "数据源",
+                "evolution": "进化与策略",
+                "strategy": "策略参数",
+                "alert": "告警阈值",
+            },
+        }
+    )
+
+
+@app.put("/api/config")
+async def api_config_save(payload: dict):
+    from src.core.config_store import ConfigStore
+    from src.llm.factory import create_client
+
+    updates = payload.get("updates", {})
+    if not isinstance(updates, dict) or not updates:
+        raise HTTPException(status_code=400, detail="updates 不能为空")
+    # 敏感字段（api_key/token）仅当以完整新值提交时更新；打码值被忽略
+    cleaned = {}
+    for key, value in updates.items():
+        val = str(value).strip()
+        if not val:
+            continue
+        if ("api_key" in key or "token" in key) and "****" in val:
+            continue
+        cleaned[key] = val
+    n = ConfigStore().save(cleaned)
+    # LLM 配置即时生效：重建生成器客户端
+    if ctx().generator is not None:
+        ctx().generator.client = create_client()
+    return SafeJSONResponse({"saved": n, "message": f"已保存 {n} 项配置"})
 
 
 def init_web_app(arena, evolution, metrics, report_generator):

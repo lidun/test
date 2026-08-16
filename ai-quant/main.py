@@ -47,22 +47,58 @@ class AIQuantSystem:
         await self.run_web_only()
 
     def start_scheduler(self):
-        """配置定时任务"""
+        """配置定时任务（时间从 system_config 读取，缺省用默认值）"""
         self.scheduler = AsyncIOScheduler()
         jobs = self.components["jobs"]
-        # 每日: 数据更新 15:30, 模拟交易 16:00, 告警 16:30, 报告 17:00
-        self.scheduler.add_job(jobs.daily_data_update, "cron", day_of_week="mon-fri", hour=15, minute=30, id="daily_data")
-        self.scheduler.add_job(jobs.daily_simulation, "cron", day_of_week="mon-fri", hour=16, minute=0, id="daily_sim")
-        self.scheduler.add_job(jobs.daily_alerts_check, "cron", day_of_week="mon-fri", hour=16, minute=30, id="daily_alert")
-        self.scheduler.add_job(jobs.daily_report, "cron", day_of_week="mon-fri", hour=17, minute=0, id="daily_report")
-        # 每周: 进化 周六10:00, 周报 周六18:00
-        self.scheduler.add_job(jobs.weekly_evolution, "cron", day_of_week="sat", hour=10, id="weekly_evolve")
-        self.scheduler.add_job(jobs.weekly_report, "cron", day_of_week="sat", hour=18, id="weekly_report")
+        cfg = {}
+        try:
+            from src.core.config_store import ConfigStore
+
+            cfg = ConfigStore().get_all()
+        except Exception:
+            cfg = {}
+
+        def hm(key: str, default: str) -> tuple[int, int]:
+            raw = cfg.get(key, default)
+            try:
+                h, m = raw.split(":")
+                return int(h), int(m)
+            except (ValueError, AttributeError):
+                d = default.split(":")
+                return int(d[0]), int(d[1])
+
+        try:
+            weekly_day = max(0, min(6, int(cfg.get("system.weekly_evolve_day", "5"))))
+        except ValueError:
+            weekly_day = 5
+        try:
+            health_interval = max(1, int(float(cfg.get("system.health_check_interval", "1"))))
+        except ValueError:
+            health_interval = 1
+
+        data_h, data_m = hm("system.daily_data_time", "15:30")
+        sim_h, sim_m = hm("system.daily_sim_time", "16:00")
+        alert_h, alert_m = hm("system.daily_alert_time", "16:30")
+        report_h, report_m = hm("system.daily_report_time", "17:00")
+        evolve_h, evolve_m = hm("system.weekly_evolve_time", "10:00")
+        wreport_h, wreport_m = hm("system.weekly_report_time", "18:00")
+
+        # 每日: 数据更新, 模拟交易, 告警, 报告
+        self.scheduler.add_job(jobs.daily_data_update, "cron", day_of_week="mon-fri", hour=data_h, minute=data_m, id="daily_data")
+        self.scheduler.add_job(jobs.daily_simulation, "cron", day_of_week="mon-fri", hour=sim_h, minute=sim_m, id="daily_sim")
+        self.scheduler.add_job(jobs.daily_alerts_check, "cron", day_of_week="mon-fri", hour=alert_h, minute=alert_m, id="daily_alert")
+        self.scheduler.add_job(jobs.daily_report, "cron", day_of_week="mon-fri", hour=report_h, minute=report_m, id="daily_report")
+        # 每周: 进化, 周报
+        self.scheduler.add_job(jobs.weekly_evolution, "cron", day_of_week=weekly_day, hour=evolve_h, minute=evolve_m, id="weekly_evolve")
+        self.scheduler.add_job(jobs.weekly_report, "cron", day_of_week=weekly_day, hour=wreport_h, minute=wreport_m, id="weekly_report")
         # 维护: 健康检查每小时, 数据清理凌晨3点
-        self.scheduler.add_job(jobs.system_health_check, "interval", hours=1, id="health_check")
+        self.scheduler.add_job(jobs.system_health_check, "interval", hours=health_interval, id="health_check")
         self.scheduler.add_job(jobs.cleanup_old_data, "cron", hour=3, id="cleanup")
         self.scheduler.start()
-        logger.info("调度器已启动")
+        logger.info(
+            f"调度器已启动 (数据{data_h:02d}:{data_m:02d} 模拟{sim_h:02d}:{sim_m:02d} "
+            f"报告{report_h:02d}:{report_m:02d} 进化{evolve_h:02d}:{evolve_m:02d})"
+        )
 
     async def run_web_only(self):
         """仅启动 Web 服务"""

@@ -9,10 +9,16 @@
 :root{--primary:#667eea;--bg:#f5f7fa;--card:#fff;--text:#333;--muted:#888}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
-.header h1{font-size:22px;font-weight:600}
+.header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.header h1{font-size:20px;font-weight:600}
 .header .sub{font-size:13px;opacity:.85}
+.nav{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:0 28px;display:flex;gap:4px;position:sticky;top:0;z-index:10}
+.nav button{border:none;background:none;padding:14px 20px;font-size:14px;cursor:pointer;color:#666;border-bottom:3px solid transparent;font-weight:500}
+.nav button.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.nav button:hover{color:var(--primary)}
 .container{max-width:1280px;margin:24px auto;padding:0 20px}
+.tab{display:none}
+.tab.active{display:block}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
 .card{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .card .label{font-size:13px;color:var(--muted);margin-bottom:8px}
@@ -34,6 +40,8 @@ tr:hover{background:#fafbfe}
 .btn{background:var(--primary);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px}
 .btn:hover{opacity:.9}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:#eef0f7;color:#555}
+.btn.green{background:#16a34a}
 .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
 .dot-ok{background:#16a34a}
 .dot-warn{background:#f59e0b}
@@ -45,6 +53,20 @@ tr:hover{background:#fafbfe}
 .chart{height:340px}
 .mt{margin-top:16px}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+pre.report-body{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.7;background:#f8f9fc;padding:16px;border-radius:8px;max-height:520px;overflow:auto}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.config-grid{grid-template-columns:1fr}}
+.cfg-group{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
+.cfg-group h3{font-size:15px;margin-bottom:14px;color:#1e293b;padding-bottom:8px;border-bottom:1px solid #eee}
+.cfg-item{margin-bottom:12px}
+.cfg-item label{display:block;font-size:13px;color:#555;margin-bottom:5px}
+.cfg-item label .desc{color:var(--muted);font-weight:400}
+.cfg-item input,.cfg-item select{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.cfg-item input:focus,.cfg-item select:focus{outline:none;border-color:var(--primary)}
+.report-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.tab-badge{display:inline-block;padding:4px 14px;border-radius:20px;border:1px solid #ddd;cursor:pointer;font-size:13px;color:#666}
+.tab-badge.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.tip{background:#fff7ed;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;font-size:13px;color:#7c4a03;margin-bottom:16px}
 </style>
 </head>
 <body>
@@ -55,88 +77,158 @@ tr:hover{background:#fafbfe}
     <div class="sub">LLM 策略生成 · 模拟竞技场 · 达尔文进化</div>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
-    <div class="sub">当前 {{ now.strftime('%Y-%m-%d %H:%M') }}</div>
+    <div class="sub" id="nowText"></div>
     <span id="providerBadge" class="badge pending">检查 LLM...</span>
   </div>
 </div>
 
+<div class="nav">
+  <button class="active" data-tab="overview" onclick="switchTab('overview')">总览</button>
+  <button data-tab="reports" onclick="switchTab('reports')">报告</button>
+  <button data-tab="config" onclick="switchTab('config')">系统配置</button>
+  <button data-tab="evolution" onclick="switchTab('evolution')">进化中心</button>
+</div>
+
 <div class="container">
 
-  <div class="cards">
-    <div class="card"><div class="label">活跃策略</div><div class="value" id="statStrategies">-</div></div>
-    <div class="card"><div class="label">竞技场总资产</div><div class="value" id="statCapital">-</div></div>
-    <div class="card"><div class="label">平均收益</div><div class="value" id="statAvgReturn">-</div></div>
-    <div class="card"><div class="label">盈利策略</div><div class="value green" id="statPositive">-</div></div>
-    <div class="card"><div class="label">亏损策略</div><div class="value red" id="statNegative">-</div></div>
-  </div>
-
-  <div class="panel">
-    <h2>策略排行榜</h2>
-    <div id="leaderboard"><div class="loading">加载中...</div></div>
-  </div>
-
-  <div class="grid-2">
-    <div class="panel">
-      <h2>净值走势对比</h2>
-      <div class="loading" id="navChartLoading">加载中...</div>
-      <div id="navChart" class="chart"></div>
+  <!-- ===================== 总览 ===================== -->
+  <div id="tab-overview" class="tab active">
+    <div class="cards">
+      <div class="card"><div class="label">活跃策略</div><div class="value" id="statStrategies">-</div></div>
+      <div class="card"><div class="label">竞技场总资产</div><div class="value" id="statCapital">-</div></div>
+      <div class="card"><div class="label">平均收益</div><div class="value" id="statAvgReturn">-</div></div>
+      <div class="card"><div class="label">盈利策略</div><div class="value green" id="statPositive">-</div></div>
+      <div class="card"><div class="label">亏损策略</div><div class="value red" id="statNegative">-</div></div>
     </div>
-    <div class="panel">
-      <h2>系统健康</h2>
-      <div id="healthInfo"><div class="loading">加载中...</div></div>
-    </div>
-  </div>
 
-  <div class="panel">
-    <h2>策略详情</h2>
-    <div class="detail-grid">
-      <div>
-        <h3 style="font-size:15px;color:#555;margin-bottom:12px">基础信息</h3>
-        <div id="strategyInfo"><div class="loading">点击排行榜中的策略查看详情</div></div>
+    <div class="panel">
+      <h2>策略排行榜</h2>
+      <div id="leaderboard"><div class="loading">加载中...</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>净值走势对比</h2>
+        <div id="navChart" class="chart"></div>
       </div>
-      <div>
-        <h3 style="font-size:15px;color:#555;margin-bottom:12px">最新交易</h3>
-        <div id="strategyTrades"><div class="loading">-</div></div>
+      <div class="panel">
+        <h2>系统健康</h2>
+        <div id="healthInfo"><div class="loading">加载中...</div></div>
       </div>
     </div>
+
+    <div class="panel">
+      <h2>策略详情</h2>
+      <div class="detail-grid">
+        <div>
+          <h3 style="font-size:15px;color:#555;margin-bottom:12px">基础信息</h3>
+          <div id="strategyInfo"><div class="loading">点击排行榜中的策略查看详情</div></div>
+        </div>
+        <div>
+          <h3 style="font-size:15px;color:#555;margin-bottom:12px">最新交易</h3>
+          <div id="strategyTrades"><div class="loading">-</div></div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>进化历史</h2>
-    <div id="evolutionHistory"><div class="loading">加载中...</div></div>
+  <!-- ===================== 报告 ===================== -->
+  <div id="tab-reports" class="tab">
+    <div class="tip">系统每日/每周/每月自动生成运行报告（若已启用调度器）。也可手动生成，报告将保存到历史记录。</div>
+    <div class="panel">
+      <h2>运行报告</h2>
+      <div class="report-toolbar">
+        <span class="tab-badge active" data-rt="daily" onclick="selectReportType('daily')">日报</span>
+        <span class="tab-badge" data-rt="weekly" onclick="selectReportType('weekly')">周报</span>
+        <span class="tab-badge" data-rt="monthly" onclick="selectReportType('monthly')">月报</span>
+        <span style="flex:1"></span>
+        <button class="btn green" onclick="generateReport()">生成日报</button>
+      </div>
+      <div id="reportContent"><div class="loading">选择报告类型或点击生成</div></div>
+      <h3 style="font-size:15px;color:#555;margin:20px 0 10px">历史记录</h3>
+      <div id="reportHistory"><div class="loading">加载中...</div></div>
+    </div>
   </div>
 
-  <div class="panel" style="text-align:center">
-    <button class="btn" id="btnEvolve" onclick="triggerEvolution()">手动触发进化</button>
-    <span class="muted" style="margin-left:12px" id="evolveResult"></span>
+  <!-- ===================== 配置 ===================== -->
+  <div id="tab-config" class="tab">
+    <div class="tip">配置保存在数据库并同步写入 .env。大模型配置保存后<b>立即生效</b>；系统运行时间等调度参数在<b>服务重启后</b>生效。敏感字段留空或保持打码值则不修改。</div>
+    <div class="config-grid">
+      <div id="configGroups"></div>
+      <div>
+        <div class="panel">
+          <h2>保存配置</h2>
+          <div id="configSaveInfo" class="muted" style="margin-bottom:12px">修改上方配置后点击保存。</div>
+          <button class="btn" id="btnSaveConfig" onclick="saveConfig()">保存全部配置</button>
+          <button class="btn ghost" style="margin-left:10px" onclick="loadConfig()">重新加载</button>
+        </div>
+        <div class="panel">
+          <h2>LLM 连接测试</h2>
+          <div id="llmTestResult" class="muted" style="margin-bottom:12px">可测试当前默认模型是否可用。</div>
+          <button class="btn ghost" onclick="testLLM()">测试连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 进化 ===================== -->
+  <div id="tab-evolution" class="tab">
+    <div class="cards">
+      <div class="card"><div class="label">已执行周期</div><div class="value" id="evoCycles">-</div></div>
+      <div class="card"><div class="label">累计上线策略</div><div class="value" id="evoAdded">-</div></div>
+      <div class="card"><div class="label">当前竞技场</div><div class="value" id="evoArena">-</div></div>
+    </div>
+    <div class="panel">
+      <h2>进化历史</h2>
+      <div id="evolutionHistory"><div class="loading">加载中...</div></div>
+    </div>
+    <div class="panel" style="text-align:center">
+      <button class="btn" id="btnEvolve" onclick="triggerEvolution()">手动触发一轮进化</button>
+      <span class="muted" style="margin-left:12px" id="evolveResult"></span>
+    </div>
   </div>
 
   <div class="muted" style="text-align:center;padding:24px 0">
-    ⚠️ 仅供学习研究使用，不构成任何投资建议
+    仅供学习研究使用，不构成任何投资建议
   </div>
 </div>
 
 <script>
 let selectedStrategy = null;
+let currentReportType = 'daily';
+const TYPE_NAMES = {daily:'日报', weekly:'周报', monthly:'月报'};
 
 async function api(url, options={}) {
   const resp = await fetch(url, options);
   if (resp.status === 401) {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center">需要认证，请刷新页面登录 (admin/admin123)</div>';
+    alert('需要认证（admin/admin123）');
     throw new Error('unauthorized');
   }
   return resp.json();
 }
 
+function switchTab(name) {
+  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+  if (name === 'reports') { loadReportHistory(); if (currentReportType) loadReportContent(); }
+  if (name === 'config') loadConfig();
+  if (name === 'evolution') loadEvolutionHistory();
+}
+
+setInterval(() => {
+  const n = new Date();
+  document.getElementById('nowText').textContent = n.toLocaleString('zh-CN');
+}, 1000);
+
+// ===================== 总览 =====================
 async function loadLeaderboard() {
   try {
     const rows = await api('/api/leaderboard?limit=20');
     const tb = document.getElementById('leaderboard');
     if (!rows || rows.length === 0) {
-      tb.innerHTML = '<div class="loading">竞技场暂无策略，点击下方按钮触发进化</div>';
+      tb.innerHTML = '<div class="loading">竞技场暂无策略，前往「进化中心」触发进化</div>';
       return;
     }
-    const labels = {total_return:'累计收益', sharpe:'夏普比率', max_drawdown:'最大回撤', win_rate:'胜率', total_value:'总资产'};
     let html = '<table><thead><tr><th></th><th>策略</th><th>类型</th>' +
       '<th>累计收益</th><th>夏普</th><th>最大回撤</th><th>胜率</th><th>总资产</th><th>持仓</th></tr></thead><tbody>';
     rows.forEach((r, i) => {
@@ -173,7 +265,6 @@ async function loadNavChart() {
   try {
     const rows = await api('/api/leaderboard?metric=total_return&limit=5');
     const chartDiv = document.getElementById('navChart');
-    document.getElementById('navChartLoading').style.display = 'none';
     if (!rows || rows.length === 0) {
       chartDiv.innerHTML = '<div class="loading">暂无数据</div>';
       return;
@@ -182,12 +273,7 @@ async function loadNavChart() {
     for (const r of rows) {
       const hist = await api(`/api/backtest/${r.strategy_id}?days=120`);
       if (hist && hist.length > 0) {
-        traces.push({
-          x: hist.map(h => h.date),
-          y: hist.map(h => h.nav),
-          name: r.name || r.strategy_id,
-          type: 'scatter', mode: 'lines'
-        });
+        traces.push({x: hist.map(h => h.date), y: hist.map(h => h.nav), name: r.name || r.strategy_id, type: 'scatter', mode: 'lines'});
       }
     }
     const bench = await api('/api/benchmark');
@@ -210,16 +296,13 @@ async function loadHealth() {
     const mkDot = ok => ok ? 'dot-ok' : 'dot-err';
     document.getElementById('healthInfo').innerHTML = `
       <div style="margin-bottom:12px"><span class="status-dot ${mkDot(h.status==='healthy')}"></span>系统状态: <strong>${h.status==='healthy'?'健康':'异常'}</strong></div>
-      <table>
-        <thead><tr><th>项</th><th>状态</th></tr></thead>
-        <tbody>
-          <tr><td>数据库</td><td><span class="status-dot ${mkDot(h.checks?.database?.status==='ok')}"></span>${h.checks?.database?.status || '-'}</td></tr>
-          <tr><td>Redis</td><td><span class="status-dot ${mkDot(h.checks?.redis?.status==='ok')}"></span>${h.checks?.redis?.status || '-'}</td></tr>
-          <tr><td>CPU</td><td>${s.cpu_percent ?? '-'}%</td></tr>
-          <tr><td>内存</td><td>${s.memory_percent ?? '-'}% (${s.memory_used_gb ?? '-'} GB)</td></tr>
-          <tr><td>磁盘</td><td>${s.disk_percent ?? '-'}%</td></tr>
-        </tbody>
-      </table>`;
+      <table><thead><tr><th>项</th><th>状态</th></tr></thead><tbody>
+        <tr><td>数据库</td><td><span class="status-dot ${mkDot(h.checks?.database?.status==='ok')}"></span>${h.checks?.database?.status || '-'}</td></tr>
+        <tr><td>Redis</td><td><span class="status-dot ${mkDot(h.checks?.redis?.status==='ok')}"></span>${h.checks?.redis?.status || '-'}</td></tr>
+        <tr><td>CPU</td><td>${s.cpu_percent ?? '-'}%</td></tr>
+        <tr><td>内存</td><td>${s.memory_percent ?? '-'}% (${s.memory_used_gb ?? '-'} GB)</td></tr>
+        <tr><td>磁盘</td><td>${s.disk_percent ?? '-'}%</td></tr>
+      </tbody></table>`;
   } catch(e) {}
 }
 
@@ -253,24 +336,179 @@ async function showDetail(id) {
   } catch(e) {}
 }
 
+// ===================== 报告 =====================
+function selectReportType(type) {
+  currentReportType = type;
+  document.querySelectorAll('#tab-reports .tab-badge').forEach(b => b.classList.toggle('active', b.dataset.rt === type));
+  document.querySelectorAll('#tab-reports .btn.green').forEach(b => b.textContent = '生成' + TYPE_NAMES[type]);
+  loadReportContent();
+}
+
+async function loadReportContent() {
+  try {
+    const rows = await api('/api/reports?report_type=' + currentReportType + '&limit=1');
+    const el = document.getElementById('reportContent');
+    if (!rows || rows.length === 0) {
+      el.innerHTML = '<div class="loading">暂无' + TYPE_NAMES[currentReportType] + '，点击右上角生成</div>';
+      return;
+    }
+    el.innerHTML = `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${rows[0].title}</h3>` +
+      `<pre class="report-body">${escapeHtml(rows[0].content || '')}</pre>`;
+  } catch(e) {}
+}
+
+async function loadReportHistory() {
+  try {
+    const rows = await api('/api/reports?limit=30');
+    const el = document.getElementById('reportHistory');
+    if (!rows || rows.length === 0) { el.innerHTML = '<div class="loading">暂无报告历史</div>'; return; }
+    el.innerHTML = '<table><thead><tr><th>类型</th><th>标题</th><th>时间</th><th></th></tr></thead><tbody>' +
+      rows.map(r => `<tr><td><span class="badge active">${TYPE_NAMES[r.report_type]||r.report_type}</span></td>
+        <td>${r.title}</td><td class="muted">${(r.created_at||'').slice(0,16)}</td>
+        <td><button class="btn ghost" style="padding:4px 12px" onclick="viewReport(${r.id})">查看</button></td></tr>`).join('') +
+      '</tbody></table>';
+  } catch(e) {}
+}
+
+async function viewReport(id) {
+  try {
+    const rows = await api('/api/reports?limit=100');
+    const r = rows.find(x => x.id === id);
+    if (r) {
+      document.getElementById('reportContent').innerHTML =
+        `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${r.title}</h3><pre class="report-body">${escapeHtml(r.content||'')}</pre>`;
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+  } catch(e) {}
+}
+
+async function generateReport() {
+  const btns = document.querySelectorAll('#tab-reports .btn.green');
+  btns.forEach(b => { b.disabled = true; b.textContent = '生成中...'; });
+  try {
+    const r = await api('/api/reports/generate?report_type=' + currentReportType, {method:'POST'});
+    document.getElementById('reportContent').innerHTML =
+      `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${r.latest?.title||'生成完成'}</h3><pre class="report-body">${escapeHtml(r.content||'')}</pre>`;
+    loadReportHistory();
+  } catch(e) { alert('生成失败: ' + e.message); }
+  btns.forEach(b => { b.disabled = false; b.textContent = '生成' + TYPE_NAMES[currentReportType]; });
+}
+
+// ===================== 配置 =====================
+let configData = null;
+
+async function loadConfig() {
+  try {
+    const c = await api('/api/config');
+    configData = c;
+    renderConfigGroups(c);
+  } catch(e) { document.getElementById('configGroups').innerHTML = '<div class="loading">配置加载失败</div>'; }
+}
+
+function renderConfigGroups(c) {
+  const groups = {};
+  c.schema.forEach(item => {
+    if (!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+  });
+  const CAT_NAMES = c.category_names || {};
+  let html = '';
+  Object.keys(groups).forEach(cat => {
+    html += `<div class="cfg-group"><h3>${CAT_NAMES[cat] || cat}</h3>`;
+    groups[cat].forEach(item => {
+      const isProvider = item.key.match(/llm\.(\w+)_api_key/);
+      let control = '';
+      if (item.key === 'llm.default_provider') {
+        control = `<select id="cfg_${item.key}">` +
+          ['deepseek','qwen','moonshot','glm','ollama','openai'].map(p =>
+            `<option value="${p}" ${item.value===p?'selected':''}>${p}</option>`).join('') +
+          '</select>';
+      } else if (item.key === 'evolution.enable_crossover') {
+        control = `<select id="cfg_${item.key}"><option value="true" ${item.value==='true'?'selected':''}>开启</option><option value="false" ${item.value!=='true'?'selected':''}>关闭</option></select>`;
+      } else {
+        control = `<input id="cfg_${item.key}" type="text" value="${escapeHtml(item.value)}" placeholder="${escapeHtml(item.default||'')}">`;
+      }
+      const secretTag = item.secret ? '（敏感，留空保持原值）' : '';
+      html += `<div class="cfg-item"><label>${item.key} <span class="desc">- ${item.description}${secretTag}</span></label>${control}</div>`;
+    });
+    html += '</div>';
+  });
+  document.getElementById('configGroups').innerHTML = html;
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('btnSaveConfig');
+  btn.disabled = true;
+  document.getElementById('configSaveInfo').textContent = '保存中...';
+  const updates = {};
+  (configData?.schema || []).forEach(item => {
+    const el = document.getElementById('cfg_' + item.key);
+    if (el) updates[item.key] = el.value.trim();
+  });
+  try {
+    const r = await api('/api/config', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({updates})
+    });
+    document.getElementById('configSaveInfo').textContent = r.message;
+    await loadProviders();
+  } catch(e) {
+    document.getElementById('configSaveInfo').textContent = '保存失败: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+async function testLLM() {
+  const el = document.getElementById('llmTestResult');
+  el.textContent = '测试中...';
+  try {
+    const p = await api('/api/llm/providers');
+    el.textContent = p.generator_available
+      ? `当前使用 ${p.generator_using}，模型可用`
+      : '当前无可用 LLM（降级为内置模板模式）';
+  } catch(e) { el.textContent = '测试失败: ' + e.message; }
+}
+
+// ===================== 进化 =====================
 async function loadEvolutionHistory() {
   try {
-    const rows = await api('/api/evolution/history?limit=10');
+    const rows = await api('/api/evolution/history?limit=20');
     const el = document.getElementById('evolutionHistory');
     if (!rows || rows.length === 0) { el.innerHTML = '<div class="loading">尚未执行进化</div>'; return; }
+    document.getElementById('evoCycles').textContent = rows.length;
+    document.getElementById('evoAdded').textContent = rows.reduce((s,r)=>s+(r.added||0),0);
+    document.getElementById('evoArena').textContent = rows[0].arena_size ?? '-';
     el.innerHTML = '<table><thead><tr><th>周期</th><th>时间</th><th>淘汰</th><th>变异</th><th>杂交</th><th>新生</th><th>上线</th><th>竞技场</th></tr></thead><tbody>' +
       rows.map(r => `<tr><td>#${r.cycle}</td><td>${(r.timestamp||'').slice(0,16)}</td><td>${r.eliminated??'-'}</td><td>${r.mutated??'-'}</td><td>${r.crossover??'-'}</td><td>${r.new??'-'}</td><td>${r.added??'-'}</td><td>${r.arena_size??'-'}</td></tr>`).join('') +
       '</tbody></table>';
   } catch(e) {}
 }
 
+async function triggerEvolution() {
+  const btn = document.getElementById('btnEvolve');
+  btn.disabled = true;
+  document.getElementById('evolveResult').textContent = '进化执行中（约1分钟）...';
+  try {
+    const r = await api('/api/evolution/trigger', {method:'POST'});
+    document.getElementById('evolveResult').textContent =
+      `完成: 淘汰${r.eliminated}, 变异${r.mutated}, 杂交${r.crossover}, 新生${r.new}, 上线${r.added}`;
+    await loadEvolutionHistory();
+    await loadLeaderboard(); await loadArenaStats(); await loadNavChart();
+  } catch(e) {
+    document.getElementById('evolveResult').textContent = '进化失败: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// ===================== LLM badge =====================
 async function loadProviders() {
   try {
     const p = await api('/api/llm/providers');
     const b = document.getElementById('providerBadge');
     if (p.generator_available) {
       b.className = 'badge active';
-      b.textContent = `${p.default_provider} / ${p.generator_using} 可用`;
+      b.textContent = `${p.generator_using} / ${p.default_provider} 可用`;
     } else {
       b.className = 'badge negative';
       b.textContent = 'LLM 未配置(降级模式)';
@@ -278,29 +516,18 @@ async function loadProviders() {
   } catch(e) {}
 }
 
-async function triggerEvolution() {
-  const btn = document.getElementById('btnEvolve');
-  btn.disabled = true;
-  document.getElementById('evolveResult').textContent = '进化执行中...';
-  try {
-    const r = await api('/api/evolution/trigger', {method:'POST'});
-    document.getElementById('evolveResult').textContent =
-      `完成: 淘汰${r.eliminated}, 变异${r.mutated}, 杂交${r.crossover}, 新生${r.new}, 上线${r.added}`;
-    await loadLeaderboard(); await loadArenaStats(); await loadNavChart(); await loadEvolutionHistory();
-  } catch(e) {
-    document.getElementById('evolveResult').textContent = '进化失败: ' + e;
-  }
-  btn.disabled = false;
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-setInterval(async () => { await loadLeaderboard(); await loadArenaStats(); await loadHealth(); }, 30000);
-
+// ===================== 初始化 =====================
+document.querySelectorAll('#tab-reports .btn.green').forEach(b => b.textContent = '生成' + TYPE_NAMES[currentReportType]);
 loadLeaderboard();
 loadArenaStats();
 loadNavChart();
 loadHealth();
-loadEvolutionHistory();
 loadProviders();
+loadReportHistory();
 </script>
 </body>
 </html>
