@@ -17,6 +17,16 @@ This file records user instructions, preferences, and teachings for reference in
 
 [Project Knowledge Summary]
 - Date: 2026-08-16
+- Context: Discovered by Agent while接入 FTShare（非凸科技）免费数据源
+- Category: Environment Configuration / Troubleshooting & Debugging
+- Instructions:
+  - FTShare 公共 MCP 端点 `https://market.ft.tech/gateway/mcp` 免费无需 token，JSON-RPC over HTTP（streamable HTTP），requests 即可调用（curl HTTP/2 POST 间歇失败，用 requests）。
+  - SSE 响应解析坑：JSON 被服务端拆成多行仅首行带 `data: ` 前缀，且 `id:`/`retry:`/`event:` 是元数据行必须忽略，按空行事件边界拼接（_parse_sse）；空响应体返回 {}（notifications/initialized）。
+  - 关键工具：`ft_daec_ohlcs`（A股历史日线，symbol 用 `600519.XSHG` 格式，since/until 格式 YYYYMMDD）；`ft_get_eastmoney_stock_valuation`（个股历史估值 pe_ttm/pb_mrq，不带日期或翻页可取全量，total 约 2091 条/8年）；`ft_daec_stocks_all`（全市场快照含 pe_ttm，但每页固定返回 36 条，上限 page_size=200，仅当日实时无历史）；`daily_ohlc`（东财上游）A股被拒不可用。
+  - 估值回填脚本：`python3 scripts/backfill_ftshare_valuation.py`（TOP60 只近 1 年真实 pe/pb，覆盖合成数据，约 4 分钟）。
+
+[Project Knowledge Summary]
+- Date: 2026-08-16
 - Context: Discovered by Agent while running ai-quant 构建与验证
 - Category: Build Methods
 - Instructions:
