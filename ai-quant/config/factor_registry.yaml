@@ -1,0 +1,72 @@
+# 因子注册表
+# 每个因子条目: name -> {type, window, description}
+factors:
+  - name: ma_20
+    type: technical
+    window: 20
+    description: 20日均线
+
+  - name: ma_60
+    type: technical
+    window: 60
+    description: 60日均线
+
+  - name: rsi_14
+    type: technical
+    window: 14
+    description: 14日RSI
+
+  - name: macd_hist
+    type: technical
+    window: null
+    description: MACD柱
+
+  - name: boll_width
+    type: technical
+    window: 20
+    description: 布林带宽度
+
+  - name: ret_5d
+    type: momentum
+    window: 5
+    description: 5日动量
+
+  - name: ret_20d
+    type: momentum
+    window: 20
+    description: 20日动量
+
+  - name: ret_60d
+    type: momentum
+    window: 60
+    description: 60日动量
+
+  - name: volatility_20d
+    type: momentum
+    window: 20
+    description: 20日年化波动率
+
+  - name: max_drawdown_60d
+    type: momentum
+    window: 60
+    description: 60日最大回撤
+
+  - name: volume_ratio_5d
+    type: momentum
+    window: 5
+    description: 5日量比
+
+  - name: pe_ttm
+    type: fundamental
+    window: null
+    description: 市盈率TTM
+
+  - name: pb
+    type: fundamental
+    window: null
+    description: 市净率
+
+  - name: dividend_yield
+    type: fundamental
+    window: null
+    description: 股息率

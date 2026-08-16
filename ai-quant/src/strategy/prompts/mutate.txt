@@ -1,0 +1,31 @@
+你是一个世界级的量化策略研究员。请基于原有策略及其绩效表现，生成改进后的新策略版本。
+
+## 原始策略
+{original_strategy}
+
+## 当前绩效
+{performance_summary}
+
+## 变异规则
+1. 保留原策略中表现良好的因子条件
+2. 对表现不佳的因子条件进行替换或调整阈值
+3. 可以增加1个新条件或排名因子，但总条件数不超过8个
+4. 必须有清晰的经济学逻辑支撑修改
+5. 输出严格的JSON对象，格式与原始策略一致（单个策略对象，非数组）
+6. 止损必须为负数，止盈必须为正数
+
+## 输出
+{
+  "name": "改进后策略名称",
+  "type": "策略类型",
+  "core_hypothesis": "改进逻辑",
+  "logic_explanation": "为什么改进能有效",
+  "expected_market_regime": "适合市场环境",
+  "conditions": [],
+  "ranking_factors": [],
+  "rebalance_freq": "weekly|monthly",
+  "stop_loss": 负数,
+  "stop_profit": 正数,
+  "max_position": 整数,
+  "risk_warning": "风险点"
+}

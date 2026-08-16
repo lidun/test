@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Data & Databases
+data/
+*.db
+*.sqlite3
+
+# ChromaDB
+chroma/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+.DS_Store

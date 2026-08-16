@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI自主进化选股系统</title>
+<script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
+<style>
+:root{--primary:#667eea;--bg:#f5f7fa;--card:#fff;--text:#333;--muted:#888}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.header h1{font-size:22px;font-weight:600}
+.header .sub{font-size:13px;opacity:.85}
+.container{max-width:1280px;margin:24px auto;padding:0 20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.card .label{font-size:13px;color:var(--muted);margin-bottom:8px}
+.card .value{font-size:28px;font-weight:700;color:#1e293b}
+.card .value.green{color:#16a34a}
+.card .value.red{color:#dc2626}
+.panel{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:24px}
+.panel h2{font-size:17px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #e5e7eb;color:#1e293b}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #f0f1f3}
+th{background:#f8f9fc;font-weight:600;color:#555}
+tr:hover{background:#fafbfe}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500}
+.badge.active{background:#dcfce7;color:#166534}
+.badge.pending{background:#fef9c3;color:#854d0e}
+.badge.eliminated{background:#fee2e2;color:#991b1b}
+.badge.positive{background:#dcfce7;color:#166534}
+.badge.negative{background:#fee2e2;color:#991b1b}
+.btn{background:var(--primary);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px}
+.btn:hover{opacity:.9}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.dot-ok{background:#16a34a}
+.dot-warn{background:#f59e0b}
+.dot-err{background:#dc2626}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+.loading{color:var(--muted);padding:20px;text-align:center}
+.muted{color:var(--muted);font-size:12px}
+.chart{height:340px}
+.mt{margin-top:16px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>AI自主进化选股系统</h1>
+    <div class="sub">LLM 策略生成 · 模拟竞技场 · 达尔文进化</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="sub">当前 {{ now.strftime('%Y-%m-%d %H:%M') }}</div>
+    <span id="providerBadge" class="badge pending">检查 LLM...</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="cards">
+    <div class="card"><div class="label">活跃策略</div><div class="value" id="statStrategies">-</div></div>
+    <div class="card"><div class="label">竞技场总资产</div><div class="value" id="statCapital">-</div></div>
+    <div class="card"><div class="label">平均收益</div><div class="value" id="statAvgReturn">-</div></div>
+    <div class="card"><div class="label">盈利策略</div><div class="value green" id="statPositive">-</div></div>
+    <div class="card"><div class="label">亏损策略</div><div class="value red" id="statNegative">-</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>策略排行榜</h2>
+    <div id="leaderboard"><div class="loading">加载中...</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>净值走势对比</h2>
+      <div class="loading" id="navChartLoading">加载中...</div>
+      <div id="navChart" class="chart"></div>
+    </div>
+    <div class="panel">
+      <h2>系统健康</h2>
+      <div id="healthInfo"><div class="loading">加载中...</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>策略详情</h2>
+    <div class="detail-grid">
+      <div>
+        <h3 style="font-size:15px;color:#555;margin-bottom:12px">基础信息</h3>
+        <div id="strategyInfo"><div class="loading">点击排行榜中的策略查看详情</div></div>
+      </div>
+      <div>
+        <h3 style="font-size:15px;color:#555;margin-bottom:12px">最新交易</h3>
+        <div id="strategyTrades"><div class="loading">-</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>进化历史</h2>
+    <div id="evolutionHistory"><div class="loading">加载中...</div></div>
+  </div>
+
+  <div class="panel" style="text-align:center">
+    <button class="btn" id="btnEvolve" onclick="triggerEvolution()">手动触发进化</button>
+    <span class="muted" style="margin-left:12px" id="evolveResult"></span>
+  </div>
+
+  <div class="muted" style="text-align:center;padding:24px 0">
+    ⚠️ 仅供学习研究使用，不构成任何投资建议
+  </div>
+</div>
+
+<script>
+let selectedStrategy = null;
+
+async function api(url, options={}) {
+  const resp = await fetch(url, options);
+  if (resp.status === 401) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center">需要认证，请刷新页面登录 (admin/admin123)</div>';
+    throw new Error('unauthorized');
+  }
+  return resp.json();
+}
+
+async function loadLeaderboard() {
+  try {
+    const rows = await api('/api/leaderboard?limit=20');
+    const tb = document.getElementById('leaderboard');
+    if (!rows || rows.length === 0) {
+      tb.innerHTML = '<div class="loading">竞技场暂无策略，点击下方按钮触发进化</div>';
+      return;
+    }
+    const labels = {total_return:'累计收益', sharpe:'夏普比率', max_drawdown:'最大回撤', win_rate:'胜率', total_value:'总资产'};
+    let html = '<table><thead><tr><th></th><th>策略</th><th>类型</th>' +
+      '<th>累计收益</th><th>夏普</th><th>最大回撤</th><th>胜率</th><th>总资产</th><th>持仓</th></tr></thead><tbody>';
+    rows.forEach((r, i) => {
+      const tr = typeof r.total_return === 'number' ? r.total_return : 0;
+      const cls = tr >= 0 ? 'badge positive' : 'badge negative';
+      html += `<tr onclick="showDetail('${r.strategy_id}')" style="cursor:pointer">
+        <td>${i+1}</td>
+        <td><strong>${r.name || r.strategy_id}</strong></td>
+        <td>${r.type || '-'}</td>
+        <td><span class="${cls}">${(tr*100).toFixed(2)}%</span></td>
+        <td>${r.sharpe?.toFixed(2) ?? '-'}</td>
+        <td>${r.max_drawdown!=null ? (r.max_drawdown*100).toFixed(2)+'%' : '-'}</td>
+        <td>${r.win_rate!=null ? (r.win_rate*100).toFixed(0)+'%' : '-'}</td>
+        <td>${r.total_value!=null ? r.total_value.toLocaleString() : '-'}</td>
+        <td>${r.positions ?? '-'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    tb.innerHTML = html;
+  } catch(e) { document.getElementById('leaderboard').innerHTML = '<div class="loading">加载失败</div>'; }
+}
+
+async function loadArenaStats() {
+  try {
+    const s = await api('/api/arena/stats');
+    document.getElementById('statStrategies').textContent = s.total_strategies ?? '-';
+    document.getElementById('statCapital').textContent = s.total_capital ? s.total_capital.toLocaleString() : '-';
+    document.getElementById('statAvgReturn').textContent = s.avg_return!=null ? (s.avg_return*100).toFixed(2)+'%' : '-';
+    document.getElementById('statPositive').textContent = s.positive_count ?? '-';
+    document.getElementById('statNegative').textContent = s.negative_count ?? '-';
+  } catch(e) {}
+}
+
+async function loadNavChart() {
+  try {
+    const rows = await api('/api/leaderboard?metric=total_return&limit=5');
+    const chartDiv = document.getElementById('navChart');
+    document.getElementById('navChartLoading').style.display = 'none';
+    if (!rows || rows.length === 0) {
+      chartDiv.innerHTML = '<div class="loading">暂无数据</div>';
+      return;
+    }
+    const traces = [];
+    for (const r of rows) {
+      const hist = await api(`/api/backtest/${r.strategy_id}?days=120`);
+      if (hist && hist.length > 0) {
+        traces.push({
+          x: hist.map(h => h.date),
+          y: hist.map(h => h.nav),
+          name: r.name || r.strategy_id,
+          type: 'scatter', mode: 'lines'
+        });
+      }
+    }
+    const bench = await api('/api/benchmark');
+    if (bench && bench.length > 1) {
+      traces.push({x: bench.map(b=>b.date), y: bench.map(b=>b.nav*100000), name:'基准(沪深300)', type:'scatter', mode:'lines', line:{dash:'dash'}});
+    }
+    Plotly.newPlot(chartDiv, traces, {
+      title: {text: '策略净值曲线', font:{size:14}},
+      margin: {t: 40, l: 60, r: 20, b: 40},
+      legend: {orientation: 'h'},
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)'
+    }, {responsive: true});
+  } catch(e) {}
+}
+
+async function loadHealth() {
+  try {
+    const h = await api('/api/health');
+    const s = h.system || {};
+    const mkDot = ok => ok ? 'dot-ok' : 'dot-err';
+    document.getElementById('healthInfo').innerHTML = `
+      <div style="margin-bottom:12px"><span class="status-dot ${mkDot(h.status==='healthy')}"></span>系统状态: <strong>${h.status==='healthy'?'健康':'异常'}</strong></div>
+      <table>
+        <thead><tr><th>项</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>数据库</td><td><span class="status-dot ${mkDot(h.checks?.database?.status==='ok')}"></span>${h.checks?.database?.status || '-'}</td></tr>
+          <tr><td>Redis</td><td><span class="status-dot ${mkDot(h.checks?.redis?.status==='ok')}"></span>${h.checks?.redis?.status || '-'}</td></tr>
+          <tr><td>CPU</td><td>${s.cpu_percent ?? '-'}%</td></tr>
+          <tr><td>内存</td><td>${s.memory_percent ?? '-'}% (${s.memory_used_gb ?? '-'} GB)</td></tr>
+          <tr><td>磁盘</td><td>${s.disk_percent ?? '-'}%</td></tr>
+        </tbody>
+      </table>`;
+  } catch(e) {}
+}
+
+async function showDetail(id) {
+  selectedStrategy = id;
+  try {
+    const d = await api('/api/strategy/' + id);
+    const info = d.info || {};
+    const st = d.stats || {};
+    const conds = (info.conditions || []).map(c =>
+      `<tr><td>${c.factor}</td><td>${c.operator} ${Array.isArray(c.value)?c.value.join('~'):c.value}</td><td class="muted">${c.rationale||''}</td></tr>`
+    ).join('');
+    document.getElementById('strategyInfo').innerHTML = `
+      <p><strong>${info.name||id}</strong> <span class="badge active">${info.type||'hybrid'}</span> <span class="muted">gen ${info.generation??0}</span></p>
+      <p class="muted" style="margin:8px 0">核心假设: ${info.core_hypothesis||'-'}</p>
+      <p class="muted">止损 ${info.stop_loss} / 止盈 ${info.stop_profit} / 最大持仓 ${info.max_position}</p>
+      <p class="muted">调仓频率: ${info.rebalance_freq||'-'} | 风险提示: ${info.risk_warning||'-'}</p>
+      <p class="muted" style="margin-top:8px">夏普 ${st.sharpe?.toFixed(2)??'-'} | 最大回撤 ${st.max_drawdown!=null?(st.max_drawdown*100).toFixed(2)+'%':'-'} | 胜率 ${st.win_rate!=null?(st.win_rate*100).toFixed(0)+'%':'-'}</p>
+      ${conds ? '<table style="margin-top:10px"><thead><tr><th>因子</th><th>条件</th><th>逻辑</th></tr></thead><tbody>'+conds+'</tbody></table>' : ''}
+      <div style="margin-top:8px"><strong>排名因子:</strong> <span class="muted">${(info.ranking_factors||[]).map(r=>`${r.factor}(${r.weight})`).join(', ')||'-'}</span></div>`;
+    const trades = d.trades || [];
+    if (trades.length === 0) {
+      document.getElementById('strategyTrades').innerHTML = '<div class="loading">暂无交易</div>';
+    } else {
+      document.getElementById('strategyTrades').innerHTML =
+        '<table><thead><tr><th>日期</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>原因</th></tr></thead><tbody>' +
+        trades.slice(-10).reverse().map(t =>
+          `<tr><td>${t.trade_date}</td><td>${t.ts_code}</td><td><span class="badge ${t.direction==='buy'?'positive':'negative'}">${t.direction==='buy'?'买入':'卖出'}</span></td><td>${t.price}</td><td>${t.shares}</td><td class="muted">${t.reason||''}</td></tr>`
+        ).join('') + '</tbody></table>';
+    }
+  } catch(e) {}
+}
+
+async function loadEvolutionHistory() {
+  try {
+    const rows = await api('/api/evolution/history?limit=10');
+    const el = document.getElementById('evolutionHistory');
+    if (!rows || rows.length === 0) { el.innerHTML = '<div class="loading">尚未执行进化</div>'; return; }
+    el.innerHTML = '<table><thead><tr><th>周期</th><th>时间</th><th>淘汰</th><th>变异</th><th>杂交</th><th>新生</th><th>上线</th><th>竞技场</th></tr></thead><tbody>' +
+      rows.map(r => `<tr><td>#${r.cycle}</td><td>${(r.timestamp||'').slice(0,16)}</td><td>${r.eliminated??'-'}</td><td>${r.mutated??'-'}</td><td>${r.crossover??'-'}</td><td>${r.new??'-'}</td><td>${r.added??'-'}</td><td>${r.arena_size??'-'}</td></tr>`).join('') +
+      '</tbody></table>';
+  } catch(e) {}
+}
+
+async function loadProviders() {
+  try {
+    const p = await api('/api/llm/providers');
+    const b = document.getElementById('providerBadge');
+    if (p.generator_available) {
+      b.className = 'badge active';
+      b.textContent = `${p.default_provider} / ${p.generator_using} 可用`;
+    } else {
+      b.className = 'badge negative';
+      b.textContent = 'LLM 未配置(降级模式)';
+    }
+  } catch(e) {}
+}
+
+async function triggerEvolution() {
+  const btn = document.getElementById('btnEvolve');
+  btn.disabled = true;
+  document.getElementById('evolveResult').textContent = '进化执行中...';
+  try {
+    const r = await api('/api/evolution/trigger', {method:'POST'});
+    document.getElementById('evolveResult').textContent =
+      `完成: 淘汰${r.eliminated}, 变异${r.mutated}, 杂交${r.crossover}, 新生${r.new}, 上线${r.added}`;
+    await loadLeaderboard(); await loadArenaStats(); await loadNavChart(); await loadEvolutionHistory();
+  } catch(e) {
+    document.getElementById('evolveResult').textContent = '进化失败: ' + e;
+  }
+  btn.disabled = false;
+}
+
+setInterval(async () => { await loadLeaderboard(); await loadArenaStats(); await loadHealth(); }, 30000);
+
+loadLeaderboard();
+loadArenaStats();
+loadNavChart();
+loadHealth();
+loadEvolutionHistory();
+loadProviders();
+</script>
+</body>
+</html>
