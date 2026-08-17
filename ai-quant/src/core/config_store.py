@@ -15,27 +15,36 @@ from sqlalchemy import text
 from src.core.config import PROJECT_ROOT, config
 from src.core.database import get_db_session
 
+# 大模型服务商顺序（国内主流 + 本地自定义；配置页按此顺序展示）
+PROVIDER_ORDER = ["deepseek", "qwen", "moonshot", "glm", "doubao", "baidu", "spark", "ollama"]
+
 # 配置项元数据：(key, category, description, default)
 CONFIG_SCHEMA: list[tuple[str, str, str, str]] = [
     # ---- LLM 配置 ----
-    ("llm.default_provider", "llm", "默认大模型服务商 (deepseek/qwen/moonshot/glm/baidu/ollama/openai)", "deepseek"),
+    ("llm.default_provider", "llm", "默认大模型服务商 (deepseek/qwen/moonshot/glm/doubao/baidu/spark/ollama)", "deepseek"),
     ("llm.deepseek_api_key", "llm", "DeepSeek API Key", ""),
     ("llm.deepseek_base_url", "llm", "DeepSeek Base URL", "https://api.deepseek.com/v1"),
     ("llm.deepseek_model", "llm", "DeepSeek 模型", "deepseek-chat"),
     ("llm.qwen_api_key", "llm", "通义千问 API Key", ""),
     ("llm.qwen_base_url", "llm", "通义千问 Base URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
     ("llm.qwen_model", "llm", "通义千问模型", "qwen-plus"),
-    ("llm.moonshot_api_key", "llm", "Moonshot API Key", ""),
-    ("llm.moonshot_base_url", "llm", "Moonshot Base URL", "https://api.moonshot.cn/v1"),
-    ("llm.moonshot_model", "llm", "Moonshot 模型", "moonshot-v1-8k"),
+    ("llm.moonshot_api_key", "llm", "Moonshot Kimi API Key", ""),
+    ("llm.moonshot_base_url", "llm", "Moonshot Kimi Base URL", "https://api.moonshot.cn/v1"),
+    ("llm.moonshot_model", "llm", "Moonshot Kimi 模型", "moonshot-v1-8k"),
     ("llm.glm_api_key", "llm", "智谱 GLM API Key", ""),
     ("llm.glm_base_url", "llm", "智谱 GLM Base URL", "https://open.bigmodel.cn/api/paas/v4"),
     ("llm.glm_model", "llm", "智谱 GLM 模型", "glm-4-flash"),
+    ("llm.doubao_api_key", "llm", "豆包（火山方舟）API Key", ""),
+    ("llm.doubao_base_url", "llm", "豆包（火山方舟）Base URL", "https://ark.cn-beijing.volces.com/api/v3"),
+    ("llm.doubao_model", "llm", "豆包（火山方舟）模型", "doubao-seed-1-6-250615"),
+    ("llm.baidu_api_key", "llm", "百度千帆 API Key", ""),
+    ("llm.baidu_base_url", "llm", "百度千帆 Base URL", "https://qianfan.baidubce.com/v2"),
+    ("llm.baidu_model", "llm", "百度千帆模型", "ernie-4.0-8k"),
+    ("llm.spark_api_key", "llm", "讯飞星火 API Key", ""),
+    ("llm.spark_base_url", "llm", "讯飞星火 Base URL", "https://spark-api-open.xf-yun.com/v1"),
+    ("llm.spark_model", "llm", "讯飞星火模型", "generalv3.5"),
     ("llm.ollama_base_url", "llm", "本地 Ollama Base URL", "http://localhost:11434/v1"),
     ("llm.ollama_model", "llm", "本地 Ollama 模型", "qwen2.5:7b"),
-    ("llm.openai_api_key", "llm", "OpenAI API Key", ""),
-    ("llm.openai_base_url", "llm", "OpenAI Base URL", "https://api.openai.com/v1"),
-    ("llm.openai_model", "llm", "OpenAI 模型", "gpt-4o-mini"),
     ("llm.max_tokens", "llm", "LLM 最大生成 Token 数", "4096"),
     ("llm.request_timeout", "llm", "LLM 请求超时(秒)", "120"),
     # ---- 系统运行时间 ----
@@ -64,11 +73,17 @@ _ENV_MAP: dict[str, str] = {
     "llm.glm_api_key": "GLM_API_KEY",
     "llm.glm_base_url": "GLM_BASE_URL",
     "llm.glm_model": "GLM_MODEL",
+    "llm.doubao_api_key": "DOUBAO_API_KEY",
+    "llm.doubao_base_url": "DOUBAO_BASE_URL",
+    "llm.doubao_model": "DOUBAO_MODEL",
+    "llm.baidu_api_key": "BAIDU_API_KEY",
+    "llm.baidu_base_url": "BAIDU_BASE_URL",
+    "llm.baidu_model": "BAIDU_MODEL",
+    "llm.spark_api_key": "SPARK_API_KEY",
+    "llm.spark_base_url": "SPARK_BASE_URL",
+    "llm.spark_model": "SPARK_MODEL",
     "llm.ollama_base_url": "OLLAMA_BASE_URL",
     "llm.ollama_model": "OLLAMA_MODEL",
-    "llm.openai_api_key": "OPENAI_API_KEY",
-    "llm.openai_base_url": "OPENAI_BASE_URL",
-    "llm.openai_model": "OPENAI_MODEL",
     "llm.max_tokens": "LLM_MAX_TOKENS",
     "llm.request_timeout": "LLM_REQUEST_TIMEOUT",
     "data.tushare_token": "TUSHARE_TOKEN",
@@ -80,6 +95,8 @@ MODEL_OPTIONS: dict[str, list[str]] = {
     "deepseek": [
         "deepseek-chat",
         "deepseek-reasoner",
+        "deepseek-v3",
+        "deepseek-r1",
     ],
     "qwen": [
         "qwen-plus",
@@ -88,7 +105,6 @@ MODEL_OPTIONS: dict[str, list[str]] = {
         "qwen-long",
         "qwen2.5-72b-instruct",
         "qwen3-32b",
-        "qwen2.5-vl-72b-instruct",
     ],
     "moonshot": [
         "moonshot-v1-8k",
@@ -102,9 +118,30 @@ MODEL_OPTIONS: dict[str, list[str]] = {
         "glm-4-air",
         "glm-4-flash",
         "glm-4-long",
-        "glm-4v-plus",
         "glm-4.5",
         "glm-4.5-air",
+        "glm-4.6",
+    ],
+    "doubao": [
+        "doubao-seed-1-6-250615",
+        "doubao-seed-1-6-250528",
+        "doubao-1-5-pro-32k-250115",
+        "doubao-1-5-lite-32k-250115",
+    ],
+    "baidu": [
+        "ernie-4.0-8k",
+        "ernie-4.0-turbo-8k",
+        "ernie-3.5-8k",
+        "ernie-speed-8k",
+        "ernie-lite-8k",
+    ],
+    "spark": [
+        "generalv3.5",
+        "generalv3",
+        "general",
+        "spark-lite",
+        "spark-max",
+        "spark-4.0-250615",
     ],
     "ollama": [
         "qwen2.5:7b",
@@ -113,24 +150,16 @@ MODEL_OPTIONS: dict[str, list[str]] = {
         "llama3.1:8b",
         "deepseek-r1:7b",
         "glm4:9b",
-        "yi:6b",
-    ],
-    "openai": [
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo",
-        "o3-mini",
-        "o1",
     ],
 }
 
 # 需要打码展示的敏感 key
-_SECRET_KEYS = {"llm.default_provider", "llm.max_tokens"}
-
-
 def _is_secret(key: str) -> bool:
-    return "api_key" in key or "token" in key
+    if "api_key" in key:
+        return True
+    if "token" not in key:
+        return False
+    return not (key.endswith("max_tokens") or key.endswith("request_timeout"))
 
 
 class ConfigStore:
@@ -282,7 +311,7 @@ def get_llm_overrides() -> dict:
     except Exception:
         return overrides
     default_provider = cfg.get("llm.default_provider", "deepseek")
-    for name in ("deepseek", "qwen", "moonshot", "glm", "ollama", "openai"):
+    for name in PROVIDER_ORDER:
         api = cfg.get(f"llm.{name}_api_key", "")
         base = cfg.get(f"llm.{name}_base_url", "")
         model = cfg.get(f"llm.{name}_model", "")

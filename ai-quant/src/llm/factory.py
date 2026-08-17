@@ -14,10 +14,12 @@ from src.llm.providers import AnthropicClient, OpenAICompatibleClient
 _PROVIDER_LABELS = {
     "deepseek": "DeepSeek",
     "qwen": "通义千问",
-    "moonshot": "Moonshot",
+    "moonshot": "Kimi",
     "glm": "智谱GLM",
+    "doubao": "豆包(火山方舟)",
+    "baidu": "百度千帆",
+    "spark": "讯飞星火",
     "ollama": "本地Ollama",
-    "openai": "OpenAI",
 }
 
 
@@ -34,7 +36,7 @@ def create_client(provider_name: str | None = None) -> LLMClient:
     """根据 provider 名称创建客户端
 
     Args:
-        provider_name: deepseek/qwen/moonshot/glm/baidu/ollama/openai/anthropic
+        provider_name: deepseek/qwen/moonshot/glm/doubao/baidu/spark/ollama/anthropic
                        None 时使用配置的默认 provider
     """
     default_provider = provider_name or config.llm.default_provider

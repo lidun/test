@@ -214,12 +214,7 @@ tr:hover{background:#fafbfe}
     <div class="form-row" id="row_system_prompt" style="display:none"><label>系统提示词（可选，自定义行为；留空则使用系统配置的默认提示词）</label><textarea id="f_system_prompt" placeholder="留空则使用系统配置的默认提示词"></textarea></div>
     <div class="form-row"><label>大模型服务商</label>
       <select id="f_provider" onchange="providerChanged()">
-        <option value="deepseek">DeepSeek</option>
-        <option value="qwen">通义千问</option>
-        <option value="moonshot">Moonshot</option>
-        <option value="glm">智谱GLM</option>
-        <option value="ollama">本地Ollama</option>
-        <option value="openai">OpenAI</option>
+        ${PROVIDERS.map(p=>`<option value="${p}">${PROVIDER_LABELS[p]||p}</option>`).join('')}
       </select>
     </div>
     <div class="form-row"><label>API Key（留空则使用系统默认配置）</label><input id="f_api_key" type="password" placeholder="sk-..."></div>
@@ -277,14 +272,17 @@ tr:hover{background:#fafbfe}
 </div>
 
 <script>
-const PROVIDERS = ['deepseek','qwen','moonshot','glm','ollama','openai'];
+const PROVIDERS = ['deepseek','qwen','moonshot','glm','doubao','baidu','spark','ollama'];
+const PROVIDER_LABELS = {deepseek:'DeepSeek',qwen:'通义千问',moonshot:'Kimi',glm:'智谱GLM',doubao:'豆包(火山方舟)',baidu:'百度千帆',spark:'讯飞星火',ollama:'本地Ollama'};
 const MODEL_PRESETS = {
-  deepseek:['deepseek-chat','deepseek-reasoner'],
+  deepseek:['deepseek-chat','deepseek-reasoner','deepseek-v3','deepseek-r1'],
   qwen:['qwen-plus','qwen-turbo','qwen-max','qwen-long','qwen2.5-72b-instruct','qwen3-32b'],
   moonshot:['moonshot-v1-8k','moonshot-v1-32k','moonshot-v1-128k','kimi-latest','kimi-k2-0711-preview'],
-  glm:['glm-4-plus','glm-4-air','glm-4-flash','glm-4-long','glm-4.5','glm-4.5-air'],
+  glm:['glm-4-plus','glm-4-air','glm-4-flash','glm-4-long','glm-4.5','glm-4.5-air','glm-4.6'],
+  doubao:['doubao-seed-1-6-250615','doubao-seed-1-6-250528','doubao-1-5-pro-32k-250115','doubao-1-5-lite-32k-250115'],
+  baidu:['ernie-4.0-8k','ernie-4.0-turbo-8k','ernie-3.5-8k','ernie-speed-8k','ernie-lite-8k'],
+  spark:['generalv3.5','generalv3','general','spark-lite','spark-max','spark-4.0-250615'],
   ollama:['qwen2.5:7b','qwen3:8b','qwen2.5:14b','llama3.1:8b','deepseek-r1:7b','glm4:9b'],
-  openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo','o3-mini','o1'],
 };
 let agents = [];
 let selectedAgentId = null;
@@ -801,6 +799,26 @@ async function loadRanking(){
 }
 
 // ============ 系统配置 ============
+let cfgProvider = 'deepseek';
+const CFG_PROV_FIELDS = {api_key:'API Key', base_url:'Base URL', model:'模型版本'};
+
+function renderCfgItem(item){
+  let control='';
+  if(item.options&&item.options.length){
+    const provider=item.key.split('.')[1].replace('_model','');
+    const known=item.options.includes(item.value);
+    control=`<div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
+      <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}">`;
+  }else if(item.key==='agent.default_system_prompt'){
+    control=`<textarea id="cfg_${item.key}" style="min-height:160px;font-family:inherit">${esc(item.value)}</textarea>
+      <div class="cfg-refresh-note">Agent 未单独配置时使用；留空则用系统内置默认。</div>`;
+  }else{
+    control=`<input id="cfg_${item.key}" type="text" value="${esc(item.value)}" placeholder="${esc(item.default||'')}">`;
+  }
+  const tag=item.secret?'（敏感，留空保持原值）':'';
+  return `<div class="cfg-item"><label>${item.key} <span class="desc">- ${item.description}${tag}</span></label>${control}</div>`;
+}
+
 async function loadConfig(){
   try{ configData=await api('/api/config'); }catch(e){ return; }
   const groups={};
@@ -809,28 +827,69 @@ async function loadConfig(){
   let html='';
   Object.keys(groups).forEach(cat=>{
     html+=`<div class="cfg-group"><h3>${CAT[cat]||cat}</h3>`;
-    groups[cat].forEach(item=>{
-      let control='';
-      if(item.key==='llm.default_provider'){
-        control=`<select id="cfg_${item.key}">${['deepseek','qwen','moonshot','glm','ollama','openai'].map(p=>`<option value="${p}" ${item.value===p?'selected':''}>${p}</option>`).join('')}</select>`;
-      }else if(item.options&&item.options.length){
-        const provider=item.key.split('.')[1].replace('_model','');
-        const known=item.options.includes(item.value);
-        control=`<div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
-          <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}">`;
-      }else if(item.key==='agent.default_system_prompt'){
-        control=`<textarea id="cfg_${item.key}" style="min-height:160px;font-family:inherit">${esc(item.value)}</textarea>
-          <div class="cfg-refresh-note">Agent 未单独配置时使用；留空则用系统内置默认。</div>`;
-      }else{
-        control=`<input id="cfg_${item.key}" type="text" value="${esc(item.value)}" placeholder="${esc(item.default||'')}">`;
-      }
-      const tag=item.secret?'（敏感，留空保持原值）':'';
-      html+=`<div class="cfg-item"><label>${item.key} <span class="desc">- ${item.description}${tag}</span></label>${control}</div>`;
-    });
+    if(cat==='llm'){
+      html+=renderLlmGroup(groups[cat]);
+    }else{
+      groups[cat].forEach(item=>{ html+=renderCfgItem(item); });
+    }
     html+='</div>';
   });
   document.getElementById('configGroups').innerHTML=html;
+  const defItem=(configData.schema||[]).find(i=>i.key==='llm.default_provider');
+  if(defItem&&PROVIDERS.includes(defItem.value)) cfgProvider=defItem.value;
+  switchCfgProvider(cfgProvider);
 }
+
+function renderLlmGroup(items){
+  const byProv={};
+  const extra=[];
+  let html='';
+  // 默认大模型服务商下拉
+  const defItem=items.find(i=>i.key==='llm.default_provider');
+  html+=`<div class="cfg-item"><label>默认大模型服务商 <span class="desc">- 系统调用大模型时默认使用的服务商</span></label>
+    <select id="cfg_llm.default_provider">${PROVIDERS.map(p=>`<option value="${p}" ${(defItem?.value||'deepseek')===p?'selected':''}>${PROVIDER_LABELS[p]||p}</option>`).join('')}</select></div>`;
+  // 服务商切换下拉
+  html+=`<div class="cfg-item"><label>大模型服务商 <span class="desc">- 选择要配置的服务商，下方仅显示该服务商的配置</span></label>
+    <select id="cfg_provider_selector" onchange="switchCfgProvider(this.value)">${PROVIDERS.map(p=>`<option value="${p}">${PROVIDER_LABELS[p]||p}</option>`).join('')}</select></div>`;
+  // 每个服务商各自的 api_key/base_url/model（按 key 前缀分组）
+  items.forEach(item=>{
+    const m=(item.key||'').match(/^llm\.(\w+)_(api_key|base_url|model)$/);
+    if(m&&PROVIDERS.includes(m[1])) (byProv[m[1]]=byProv[m[1]]||[]).push({...item, field:m[2]});
+    else if(item.key!=='llm.default_provider') extra.push(item);
+  });
+  PROVIDERS.forEach(p=>{
+    const list=byProv[p]||[];
+    html+=`<div id="cfg_prov_${p}" style="display:none">`;
+    ['api_key','base_url','model'].forEach(field=>{
+      const item=list.find(i=>i.field===field);
+      if(!item) return;
+      const label=`${PROVIDER_LABELS[p]||p} ${CFG_PROV_FIELDS[field]}`;
+      const tag=item.secret?'（敏感，留空保持原值）':'';
+      if(field==='model'){
+        const known=item.options.includes(item.value);
+        html+=`<div class="cfg-item"><label>${label} <span class="desc">- ${item.description}${tag}</span></label>
+          <div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
+          <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}"></div>`;
+      }else{
+        html+=`<div class="cfg-item"><label>${label} <span class="desc">- ${item.description}${tag}</span></label>
+          <input id="cfg_${item.key}" type="${field==='api_key'?'password':'text'}" value="${esc(item.value)}" placeholder="${esc(item.default||'')}"></div>`;
+      }
+    });
+    html+='</div>';
+  });
+  extra.forEach(item=>{ html+=renderCfgItem(item); });
+  return html;
+}
+
+function switchCfgProvider(p){
+  cfgProvider=p;
+  document.getElementById('cfg_provider_selector').value=p;
+  PROVIDERS.forEach(x=>{
+    const el=document.getElementById('cfg_prov_'+x);
+    if(el) el.style.display=(x===p)?'':'none';
+  });
+}
+
 async function saveConfig(){
   const btn=document.getElementById('btnSaveConfig');
   btn.disabled=true;

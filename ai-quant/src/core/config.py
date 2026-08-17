@@ -64,9 +64,10 @@ class LLMConfig:
             "qwen": ProviderConfig("QWEN"),
             "moonshot": ProviderConfig("MOONSHOT"),
             "glm": ProviderConfig("GLM"),
+            "doubao": ProviderConfig("DOUBAO"),
             "baidu": ProviderConfig("BAIDU"),
+            "spark": ProviderConfig("SPARK"),
             "ollama": ProviderConfig("OLLAMA"),
-            "openai": ProviderConfig("OPENAI"),
         }
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
