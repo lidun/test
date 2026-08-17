@@ -84,7 +84,6 @@ class LLMConfig:
 class DataConfig:
     def __init__(self):
         self.tushare_token = os.getenv("TUSHARE_TOKEN", "")
-        self.primary_provider = os.getenv("PRIMARY_DATA_PROVIDER", "tushare")
 
 
 class DBConfig:
@@ -127,8 +126,6 @@ class AlertConfig:
         self.dingtalk_webhook = os.getenv("DINGTALK_WEBHOOK", "")
         self.email_alert = os.getenv("EMAIL_ALERT", "")
         self.max_drawdown_alert = _get_float("ALERT_MAX_DRAWDOWN", -0.20)
-        self.daily_loss_alert = _get_float("ALERT_DAILY_LOSS", -0.05)
-        self.consecutive_loss_days = _get_int("ALERT_CONSECUTIVE_LOSS_DAYS", 5)
 
 
 

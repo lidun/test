@@ -42,16 +42,11 @@ CONFIG_SCHEMA: list[tuple[str, str, str, str]] = [
     ("system.daily_data_time", "system", "每日行情更新时间 (HH:MM)", "15:30"),
     ("system.daily_sim_time", "system", "每日模拟交易时间 (HH:MM)", "16:00"),
     ("system.daily_alert_time", "system", "每日告警检查时间 (HH:MM)", "16:30"),
-    ("system.daily_report_time", "system", "每日报告生成时间 (HH:MM)", "17:00"),
-    ("system.weekly_report_time", "system", "每周报告时间 (HH:MM)", "18:00"),
     ("system.health_check_interval", "system", "健康检查间隔(小时)", "1"),
     # ---- 数据源 ----
-    ("data.primary_provider", "data", "主数据源 (akshare/tushare/ftshare)", "akshare"),
     ("data.tushare_token", "data", "Tushare Token", ""),
     # ---- 告警 ----
     ("alert.max_drawdown", "alert", "最大回撤告警阈值 (负数)", "-0.20"),
-    ("alert.daily_loss", "alert", "单日亏损告警阈值 (负数)", "-0.05"),
-    ("alert.consecutive_loss_days", "alert", "连续亏损天数告警", "5"),
 ]
 
 _ENV_MAP: dict[str, str] = {
@@ -74,11 +69,8 @@ _ENV_MAP: dict[str, str] = {
     "llm.openai_model": "OPENAI_MODEL",
     "llm.max_tokens": "LLM_MAX_TOKENS",
     "llm.request_timeout": "LLM_REQUEST_TIMEOUT",
-    "data.primary_provider": "PRIMARY_DATA_PROVIDER",
     "data.tushare_token": "TUSHARE_TOKEN",
     "alert.max_drawdown": "ALERT_MAX_DRAWDOWN",
-    "alert.daily_loss": "ALERT_DAILY_LOSS",
-    "alert.consecutive_loss_days": "ALERT_CONSECUTIVE_LOSS_DAYS",
 }
 
 # 各服务商可选模型版本（用于前端下拉选择）
