@@ -335,6 +335,9 @@ async function renderAgentDetail(a){
   const files = (a.files||[]).map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8f9fc;border-radius:8px;margin-bottom:6px;font-size:13px">
     <span>📄 ${esc(f.name)} <span class="muted">${(f.size||0)}B · ${esc((f.mtime||'').split('T')[0])}</span></span>
     <button class="btn sm ghost" onclick="previewFile('${a.id}','${esc(f.name)}')">预览</button></div>`).join('') || '<div class="empty">暂无产出文件</div>';
+  const skills = (a.installed_skills||[]).map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8f9fc;border-radius:8px;margin-bottom:6px;font-size:13px">
+    <span>🧩 ${esc(s.slug)} ${s.has_skillmd?'<span class="badge running">SKILL.md</span>':''} <span class="muted">${(s.files||[]).length} 个文件</span></span>
+    <button class="btn sm ghost" onclick="previewSkill('${a.id}','${esc(s.slug)}')">查看说明</button></div>`).join('') || '<div class="empty">尚未安装 SkillHub 技能，对话中让 Agent 搜索安装即可</div>';
 
   document.getElementById('agentDetail').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
@@ -359,6 +362,7 @@ async function renderAgentDetail(a){
     </div>
     <div class="panel" style="box-shadow:none;padding:0"><h2>定时自动任务</h2>${tasks}</div>
     <div class="panel" style="box-shadow:none;padding:0"><h2>产出文件</h2>${files}</div>
+    <div class="panel" style="box-shadow:none;padding:0"><h2>SkillHub 技能</h2>${skills}</div>
     <div class="panel" style="box-shadow:none;padding:0"><h2>净值走势</h2><div class="chart" id="detailChart"></div></div>`;
   loadPerfChart(a.id);
 }
@@ -376,6 +380,13 @@ async function previewFile(agentId, name){
   try{
     const d = await api('/api/agents/'+agentId+'/files/'+encodeURIComponent(name));
     alert(d.content ? d.content.slice(0,3000) : '(空文件)');
+  }catch(e){ alert('读取失败：'+e.message); }
+}
+
+async function previewSkill(agentId, slug){
+  try{
+    const d = await api('/api/agents/'+agentId+'/skills/'+encodeURIComponent(slug));
+    alert(d.content ? d.content.slice(0,4000) : '(无内容)');
   }catch(e){ alert('读取失败：'+e.message); }
 }
 

@@ -213,6 +213,45 @@ TOOLS_SCHEMA: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_skillhub",
+            "description": "在腾讯 SkillHub 技能市场搜索可用技能（如 PDF 处理、数据抓取、报告生成等），返回匹配技能的 slug、用途、下载量",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词，如 周报、PDF、数据分析"},
+                    "limit": {"type": "integer", "description": "返回条数，默认 5"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "install_skill",
+            "description": "从腾讯 SkillHub 下载并安装技能到自己的技能目录（skills/），返回该技能的 SKILL.md 使用说明；安装后按说明执行任务",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "技能标识（search_skillhub 返回的 slug）"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_skill",
+            "description": "读取自己已安装技能（skills/ 目录）的 SKILL.md 使用说明",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "技能标识（安装时的 slug）"}},
+                "required": ["slug"],
+            },
+        },
+    },
 ]
 
 # 不配置原生 function calling 时使用的文本协议说明（嵌入 system prompt）
@@ -221,7 +260,8 @@ TEXT_PROTOCOL_INSTRUCTION = """你可以通过输出 JSON 动作调用工具完�
 {"action": "工具名", "args": {"参数": "值"}}
 可用动作：get_stock_quote, search_stocks, get_stock_history, get_market_overview,
 get_factor_snapshot, get_portfolio, buy_stock, sell_stock, remember, recall_memory, get_ranking,
-summarize_all, get_agent_detail, save_note, list_files, read_file。
+summarize_all, get_agent_detail, save_note, list_files, read_file,
+search_skillhub, install_skill, read_skill。
 一次只输出一个动作，执行结果会在下一轮告诉你。
 """
 
@@ -497,6 +537,66 @@ def read_file(portfolio, store: AgentStore, args) -> str:
     return content[:3000]
 
 
+def search_skillhub(portfolio, store: AgentStore, args) -> str:
+    from src.agent import skillhub
+
+    keyword = str(args.get("keyword") or "").strip()
+    limit = int(args.get("limit") or 5)
+    try:
+        items = skillhub.search_skills(keyword, limit=limit)
+    except skillhub.SkillHubError as e:
+        return f"SkillHub 搜索失败：{e}"
+    if not items:
+        return f"SkillHub 上未找到与「{keyword}」相关的技能，可换关键词重试"
+    lines = [f"SkillHub 搜索「{keyword}」共 {len(items)} 个结果："]
+    for i, it in enumerate(items, start=1):
+        lines.append(
+            f"{i}. {it['name']}（slug: {it['slug']}）\n"
+            f"   用途: {it['description'][:120] or '-'}\n"
+            f"   分类: {it['category']} | 下载 {it['downloads']} | "
+            f"需API密钥: {it['requires_api_key']}"
+        )
+    lines.append("可用 install_skill 安装某个技能（参数 slug）后按其 SKILL.md 说明执行。")
+    return "\n".join(lines)
+
+
+def install_skill(portfolio, store: AgentStore, args) -> str:
+    from src.agent import skillhub
+
+    slug = str(args.get("slug") or "").strip()
+    if not slug:
+        return "请提供技能 slug"
+    skills_dir = store.file_store.skills_dir(portfolio.agent.id)
+    try:
+        result = skillhub.install_skill(slug, skills_dir)
+    except skillhub.SkillHubError as e:
+        return f"安装技能失败：{e}"
+    md = result.get("skill_md") or ""
+    summary = skillhub.skill_summary(md, limit=2500)
+    parts = [
+        f"技能「{result['slug']}」已安装到 {result['dir']}",
+        f"包含文件: {', '.join(result['files']) or '无'}",
+    ]
+    if summary:
+        parts.append("SKILL.md 使用说明：\n" + summary)
+    else:
+        parts.append("该技能未提供 SKILL.md 说明。")
+    return "\n\n".join(parts)
+
+
+def read_skill(portfolio, store: AgentStore, args) -> str:
+    from src.agent import skillhub
+
+    slug = str(args.get("slug") or "").strip()
+    if not slug:
+        return "请提供技能 slug"
+    skills_dir = store.file_store.skills_dir(portfolio.agent.id)
+    md = skillhub.read_skill_md(skills_dir, slug, limit_chars=4000)
+    if not md:
+        return f"尚未安装技能 {slug}，先用 search_skillhub 搜索、install_skill 安装"
+    return skillhub.skill_summary(md, limit=3500) or f"技能 {slug} 无 SKILL.md 内容"
+
+
 # ---------------- 分发 ----------------
 
 def dispatch(portfolio: AgentPortfolio, store: AgentStore, name: str, args: dict) -> str:
@@ -526,6 +626,9 @@ _FUNCS = {
     "save_note": save_note,
     "list_files": list_files,
     "read_file": read_file,
+    "search_skillhub": search_skillhub,
+    "install_skill": install_skill,
+    "read_skill": read_skill,
 }
 
 

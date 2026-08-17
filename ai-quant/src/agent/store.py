@@ -524,6 +524,30 @@ class AgentFileStore:
     def memory_file(self, agent_id: str) -> Path:
         return self.dir_for(agent_id) / "memory.md"
 
+    def skills_dir(self, agent_id: str) -> Path:
+        """Agent 的 SkillHub 技能安装目录：data/agents/{agent_id}/skills/"""
+        d = self.dir_for(agent_id) / "skills"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def list_installed_skills(self, agent_id: str) -> list[dict]:
+        """列出已安装的 SkillHub 技能（目录名 + 是否含 SKILL.md）"""
+        d = self.dir_for(agent_id) / "skills"
+        out = []
+        if not d.exists():
+            return out
+        for p in sorted(d.iterdir()):
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            out.append(
+                {
+                    "slug": p.name,
+                    "has_skillmd": (p / "SKILL.md").exists(),
+                    "files": [f.name for f in p.iterdir() if f.is_file()],
+                }
+            )
+        return out
+
     # ---------------- 记忆文件 ----------------
 
     def append_memory(self, agent_id: str, content: str) -> Path:

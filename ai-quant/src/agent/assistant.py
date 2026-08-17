@@ -89,6 +89,11 @@ class AgentAssistant:
 4. 若记忆或账户信息需要回忆，用 recall_memory。
 5. 只做模拟交易，金额与股数以工具结果为准。
 6. 全部用简体中文回复，专业、简洁、可执行。
+
+SkillHub 技能库（可用能力）：
+- 需要额外能力（如 PDF 解析、数据抓取、报告生成、文档处理等）时，先用 search_skillhub 搜索腾讯 SkillHub 技能市场。
+- 找到合适技能后用 install_skill 安装（参数 slug），并按返回的 SKILL.md 使用说明执行任务；必要时用 read_skill 重新读取说明。
+- 技能需第三方 API 密钥时，向用户说明需要自行配置，不要伪造密钥。
 {extra}"""
 
     def build_messages(self, agent: Agent, user_input: str, portfolio: AgentPortfolio,

@@ -222,6 +222,7 @@ async def api_agent_detail(agent_id: str):
         for t in store.list_tasks(agent_id)
     ]
     detail["files"] = store.file_store.list_files(agent_id)
+    detail["installed_skills"] = store.file_store.list_installed_skills(agent_id)
     return SafeJSONResponse(detail)
 
 
@@ -235,6 +236,20 @@ async def api_agent_file(agent_id: str, filename: str):
     if content is None:
         raise HTTPException(status_code=404, detail="文件不存在")
     return SafeJSONResponse({"name": filename, "content": content})
+
+
+@app.get("/api/agents/{agent_id}/skills/{slug}")
+async def api_agent_skill(agent_id: str, slug: str):
+    from src.agent import skillhub
+
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    md = skillhub.read_skill_md(store.file_store.skills_dir(agent_id), slug, limit_chars=20000)
+    if not md:
+        raise HTTPException(status_code=404, detail="技能未安装")
+    return SafeJSONResponse({"slug": slug, "content": md})
 
 
 def _agent_public(agent):
