@@ -18,7 +18,7 @@ class SystemMetrics:
     memory_percent: float = 0.0
     memory_used_gb: float = 0.0
     disk_percent: float = 0.0
-    active_strategies: int = 0
+    active_agents: int = 0
     db_ok: bool = True
 
     def to_dict(self) -> dict:
@@ -27,7 +27,7 @@ class SystemMetrics:
             "memory_percent": round(self.memory_percent, 1),
             "memory_used_gb": round(self.memory_used_gb, 2),
             "disk_percent": round(self.disk_percent, 1),
-            "active_strategies": self.active_strategies,
+            "active_agents": self.active_agents,
             "db_ok": self.db_ok,
         }
 
@@ -58,42 +58,76 @@ class MetricsCollector:
             metrics.disk_percent = disk.percent
         except Exception as e:
             logger.warning(f"采集系统指标失败: {e}")
-        if self.arena:
-            metrics.active_strategies = len(self.arena.strategies)
+        try:
+            with get_db_session() as session:
+                metrics.active_agents = session.execute(
+                    text("SELECT COUNT(*) FROM agent WHERE status = 'running'")
+                ).scalar()
+        except Exception:
+            metrics.active_agents = 0
         metrics.db_ok = self.health_check()["status"] == "healthy"
         return metrics
 
     def check_strategy_alerts(self) -> List[StrategyAlert]:
+        """按 Agent 累计收益检查告警（回撤/深亏）"""
         alerts = []
-        if not self.arena:
+        try:
+            with get_db_session() as session:
+                rows = session.execute(
+                    text(
+                        """
+                        SELECT a.id, a.name, ap.cumulative_return,
+                               ap.total_value, ap.initial
+                        FROM agent a
+                        LEFT JOIN agent_performance ap ON ap.agent_id = a.id
+                          AND ap.trade_date = (SELECT MAX(trade_date) FROM agent_performance)
+                        """
+                    ).replace("ap.initial", "a.initial_capital"),
+                ).fetchall()
+        except Exception as e:
+            logger.warning(f"查询 Agent 告警数据失败: {e}")
             return alerts
-        for sid, strategy in self.arena.strategies.items():
-            stats = strategy.get_stats()
-            max_dd = stats.get("max_drawdown", 0)
+        for aid, name, cum_return, total_value, initial in rows:
+            if cum_return is None:
+                continue
+            max_dd = 0.0
+            with get_db_session() as session:
+                perf = session.execute(
+                    text(
+                        "SELECT nav FROM agent_performance WHERE agent_id = :aid ORDER BY trade_date"
+                    ),
+                    {"aid": aid},
+                ).fetchall()
+            navs = [r[0] for r in perf if r[0]]
+            if len(navs) > 1:
+                peak = navs[0]
+                dd = 0.0
+                for n in navs:
+                    peak = max(peak, n)
+                    dd = min(dd, n / peak - 1)
+                max_dd = dd
             threshold = config.alert.max_drawdown_alert
             if max_dd < threshold:
-                severity = "critical" if max_dd < threshold * 1.5 else "warning"
                 alerts.append(
                     StrategyAlert(
-                        strategy_id=sid,
-                        strategy_name=strategy.name,
+                        strategy_id=aid,
+                        strategy_name=name,
                         alert_type="drawdown",
-                        severity=severity,
+                        severity="critical" if max_dd < threshold * 1.5 else "warning",
                         message=f"最大回撤 {max_dd:.1%}",
                         current_value=round(float(max_dd), 4),
                         threshold=threshold,
                     )
                 )
-            total_return = stats.get("total_return", 0)
-            if total_return < -0.30:
+            if cum_return < -0.30:
                 alerts.append(
                     StrategyAlert(
-                        strategy_id=sid,
-                        strategy_name=strategy.name,
+                        strategy_id=aid,
+                        strategy_name=name,
                         alert_type="deep_loss",
                         severity="critical",
-                        message=f"累计亏损 {total_return:.1%}",
-                        current_value=round(float(total_return), 4),
+                        message=f"累计亏损 {cum_return:.1%}",
+                        current_value=round(float(cum_return), 4),
                         threshold=-0.30,
                     )
                 )

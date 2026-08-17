@@ -15,13 +15,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 
-def _get_bool(name: str, default: bool = False) -> bool:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    return val.strip().lower() in ("1", "true", "yes", "on")
-
-
 def _get_float(name: str, default: float) -> float:
     val = os.getenv(name)
     if val is None or val.strip() == "":
@@ -78,9 +71,6 @@ class LLMConfig:
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         self.max_tokens = _get_int("LLM_MAX_TOKENS", 4096)
-        self.temperature_generate = _get_float("LLM_TEMPERATURE_GENERATE", 0.8)
-        self.temperature_mutate = _get_float("LLM_TEMPERATURE_MUTATE", 0.6)
-        self.temperature_analyze = _get_float("LLM_TEMPERATURE_ANALYZE", 0.3)
         self.request_timeout = _get_int("LLM_REQUEST_TIMEOUT", 120)
 
     @property
@@ -132,28 +122,6 @@ class WebConfig:
         self.password = os.getenv("WEB_PASSWORD", "admin123")
 
 
-class StrategyConfig:
-    def __init__(self):
-        self.max_active_strategies = _get_int("MAX_STRATEGIES", 20)
-        self.initial_capital = _get_float("INITIAL_CAPITAL", 100000.0)
-        self.commission_rate = _get_float("COMMISSION_RATE", 0.0003)
-        self.slippage = _get_float("SLIPPAGE", 0.001)
-        self.min_sharpe_for_pass = _get_float("MIN_SHARPE_FOR_PASS", 0.3)
-        self.min_win_rate = _get_float("MIN_WIN_RATE", 0.45)
-        self.history_validation_years = _get_int("HISTORY_VALIDATION_YEARS", 3)
-        self.max_conditions = _get_int("MAX_CONDITIONS", 8)
-
-
-class EvolutionConfig:
-    def __init__(self):
-        self.cycle_days = _get_int("EVOLUTION_CYCLE_DAYS", 7)
-        self.elimination_rate = _get_float("EVOLUTION_ELIMINATION_RATE", 0.20)
-        self.elite_count = _get_int("EVOLUTION_ELITE_COUNT", 3)
-        self.mutants_per_elite = _get_int("EVOLUTION_MUTANTS_PER_ELITE", 2)
-        self.new_strategies_per_cycle = _get_int("EVOLUTION_NEW_STRATEGIES_PER_CYCLE", 3)
-        self.enable_crossover = _get_bool("EVOLUTION_ENABLE_CROSSOVER", True)
-
-
 class AlertConfig:
     def __init__(self):
         self.dingtalk_webhook = os.getenv("DINGTALK_WEBHOOK", "")
@@ -162,12 +130,6 @@ class AlertConfig:
         self.daily_loss_alert = _get_float("ALERT_DAILY_LOSS", -0.05)
         self.consecutive_loss_days = _get_int("ALERT_CONSECUTIVE_LOSS_DAYS", 5)
 
-
-class KnowledgeConfig:
-    def __init__(self):
-        self.chroma_persist_path = os.getenv("CHROMA_PERSIST_PATH", "./data/chroma")
-        self.embedding_mode = os.getenv("EMBEDDING_MODE", "builtin")
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
 
 
 class AppConfig:
@@ -184,15 +146,11 @@ class AppConfig:
         self.db = DBConfig()
         self.redis = RedisConfig()
         self.web = WebConfig()
-        self.strategy = StrategyConfig()
-        self.evolution = EvolutionConfig()
         self.alert = AlertConfig()
-        self.knowledge = KnowledgeConfig()
 
     def ensure_dirs(self):
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.LOG_DIR.mkdir(parents=True, exist_ok=True)
-        Path(self.knowledge.chroma_persist_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache(maxsize=1)

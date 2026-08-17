@@ -180,10 +180,6 @@ class DataPipeline:
         if daily_basic is not None and not daily_basic.empty:
             self._save_daily_basic(daily_basic)
 
-        await self._update_factors(target)
-
-        cache_key = f"factor_snapshot:{target.strftime('%Y%m%d')}"
-        redis_cache.delete(cache_key)
         self.completed_steps["daily_basic"] = True
 
     async def backfill_history(self, years: int = 3, codes: list[str] | None = None):
@@ -415,18 +411,6 @@ class DataPipeline:
                         **{c: _num(row.get(c)) for c in extra},
                     },
                 )
-
-    async def _update_factors(self, target_date: date):
-        """触发因子计算引擎刷新（由 factor 模块实现）"""
-        try:
-            from src.factor.engine import FactorEngine
-
-            engine = FactorEngine()
-            await engine.calculate_snapshot(target_date)
-            logger.info(f"因子更新完成: {target_date}")
-        except Exception as e:
-            logger.warning(f"因子更新失败: {e}")
-            self.failed_steps["factors"] = True
 
 
 def _num(value):

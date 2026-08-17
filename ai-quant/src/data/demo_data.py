@@ -103,10 +103,6 @@ def generate_demo_data(days: int = 180) -> int:
     with get_db_session() as session:
         session.execute(text("DELETE FROM daily_price"))
         session.execute(text("DELETE FROM stock_basic"))
-        session.execute(text("DELETE FROM factor_data"))
-        session.execute(text("DELETE FROM strategies"))
-        session.execute(text("DELETE FROM strategy_performance"))
-        session.execute(text("DELETE FROM evolution_log"))
 
     with get_db_session() as session:
         # 写入股票基础信息

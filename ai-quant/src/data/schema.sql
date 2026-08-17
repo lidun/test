@@ -1,4 +1,4 @@
--- AI 自主进化选股系统 - 数据库表结构
+-- AI 交易 Agent 系统 - 数据库表结构
 
 CREATE TABLE IF NOT EXISTS stock_basic (
     ts_code VARCHAR(20) PRIMARY KEY,
@@ -34,34 +34,78 @@ CREATE TABLE IF NOT EXISTS daily_price (
 CREATE INDEX IF NOT EXISTS idx_daily_price_date ON daily_price(trade_date);
 CREATE INDEX IF NOT EXISTS idx_daily_price_code ON daily_price(ts_code);
 
-CREATE TABLE IF NOT EXISTS factor_data (
-    id BIGSERIAL PRIMARY KEY,
-    ts_code VARCHAR(20) NOT NULL,
-    trade_date DATE NOT NULL,
-    factor_name VARCHAR(50) NOT NULL,
-    factor_value DOUBLE PRECISION,
-    UNIQUE(ts_code, trade_date, factor_name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_factor_date_name ON factor_data(trade_date, factor_name);
-CREATE INDEX IF NOT EXISTS idx_factor_code ON factor_data(ts_code);
-
-CREATE TABLE IF NOT EXISTS strategies (
+-- 交易 Agent
+CREATE TABLE IF NOT EXISTS agent (
     id VARCHAR(64) PRIMARY KEY,
-    name VARCHAR(200) NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    meta JSONB,
-    status VARCHAR(20) DEFAULT 'active',
-    generation INTEGER DEFAULT 0,
-    parent_id VARCHAR(64),
+    name VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT '',
+    system_prompt TEXT DEFAULT '',
+    llm_provider VARCHAR(30) DEFAULT 'deepseek',
+    llm_api_key TEXT DEFAULT '',
+    llm_base_url TEXT DEFAULT '',
+    llm_model VARCHAR(100) DEFAULT '',
+    status VARCHAR(20) DEFAULT 'running',          -- running/paused/archived
+    initial_capital DECIMAL(16,2) DEFAULT 100000,
+    current_cash DECIMAL(16,2) DEFAULT 100000,
+    max_position INTEGER DEFAULT 10,
+    single_stock_weight DECIMAL(5,2) DEFAULT 0.10,
+    commission_rate DECIMAL(8,4) DEFAULT 0.0003,
+    slippage DECIMAL(8,4) DEFAULT 0.001,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    eliminated_at TIMESTAMP
+    last_active_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS strategy_performance (
+-- Agent 长期记忆
+CREATE TABLE IF NOT EXISTS agent_memory (
     id BIGSERIAL PRIMARY KEY,
-    strategy_id VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    content TEXT NOT NULL,
+    memory_type VARCHAR(20) DEFAULT 'experience',  -- instruction/experience/chat_summary
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_memory ON agent_memory(agent_id);
+
+-- Agent 对话记录
+CREATE TABLE IF NOT EXISTS agent_chat (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL,
+    role VARCHAR(10) NOT NULL,                     -- user/assistant
+    content TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_chat ON agent_chat(agent_id, created_at);
+
+-- Agent 模拟持仓
+CREATE TABLE IF NOT EXISTS agent_position (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL,
+    ts_code VARCHAR(20) NOT NULL,
+    shares INTEGER NOT NULL,
+    avg_cost DECIMAL(16,4) NOT NULL,
+    current_price DECIMAL(12,3),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(agent_id, ts_code)
+);
+
+-- Agent 模拟成交
+CREATE TABLE IF NOT EXISTS agent_trade (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL,
+    ts_code VARCHAR(20) NOT NULL,
+    direction VARCHAR(10) NOT NULL,                -- buy/sell
+    price DECIMAL(12,3) NOT NULL,
+    shares INTEGER NOT NULL,
+    trade_date DATE NOT NULL,
+    reason TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_agent_trade ON agent_trade(agent_id, trade_date);
+
+-- Agent 每日绩效
+CREATE TABLE IF NOT EXISTS agent_performance (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL,
     trade_date DATE NOT NULL,
     nav DOUBLE PRECISION,
     daily_return DOUBLE PRECISION,
@@ -69,21 +113,22 @@ CREATE TABLE IF NOT EXISTS strategy_performance (
     positions_count INTEGER,
     cash DOUBLE PRECISION,
     total_value DOUBLE PRECISION,
-    UNIQUE(strategy_id, trade_date)
+    UNIQUE(agent_id, trade_date)
 );
+CREATE INDEX IF NOT EXISTS idx_agent_perf_date ON agent_performance(trade_date);
 
-CREATE TABLE IF NOT EXISTS evolution_log (
+-- Agent 定时自动任务
+CREATE TABLE IF NOT EXISTS agent_task (
     id BIGSERIAL PRIMARY KEY,
-    cycle INTEGER NOT NULL,
-    timestamp TIMESTAMP DEFAULT NOW(),
-    eliminated_count INTEGER,
-    mutated_count INTEGER,
-    crossover_count INTEGER,
-    new_count INTEGER,
-    added_count INTEGER,
-    arena_size INTEGER,
-    details JSONB
+    agent_id VARCHAR(64) NOT NULL,
+    schedule_type VARCHAR(20) NOT NULL,            -- daily/interval
+    schedule_time VARCHAR(10) DEFAULT '',          -- HH:MM (daily)
+    interval_hours DOUBLE PRECISION DEFAULT 0,     -- hours (interval)
+    enabled BOOLEAN DEFAULT TRUE,
+    last_run_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_agent_task ON agent_task(agent_id);
 
 CREATE TABLE IF NOT EXISTS system_logs (
     id BIGSERIAL PRIMARY KEY,
@@ -101,13 +146,3 @@ CREATE TABLE IF NOT EXISTS system_config (
     description TEXT,
     updated_at TIMESTAMP DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS report_history (
-    id BIGSERIAL PRIMARY KEY,
-    report_type VARCHAR(20) NOT NULL,
-    title VARCHAR(200),
-    content TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_report_type ON report_history(report_type, created_at);

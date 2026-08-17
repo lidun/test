@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI自主进化选股系统</title>
+<title>AI 交易 Agent 系统</title>
 <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
 <style>
 :root{--primary:#667eea;--bg:#f5f7fa;--card:#fff;--text:#333;--muted:#888}
@@ -19,12 +19,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-
 .container{max-width:1280px;margin:24px auto;padding:0 20px}
 .tab{display:none}
 .tab.active{display:block}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
-.card{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.card .label{font-size:13px;color:var(--muted);margin-bottom:8px}
-.card .value{font-size:28px;font-weight:700;color:#1e293b}
-.card .value.green{color:#16a34a}
-.card .value.red{color:#dc2626}
 .panel{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:24px}
 .panel h2{font-size:17px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #e5e7eb;color:#1e293b}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -32,30 +26,63 @@ th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #f0f1f3}
 th{background:#f8f9fc;font-weight:600;color:#555}
 tr:hover{background:#fafbfe}
 .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500}
-.badge.active{background:#dcfce7;color:#166534}
-.badge.pending{background:#fef9c3;color:#854d0e}
-.badge.eliminated{background:#fee2e2;color:#991b1b}
+.badge.running{background:#dcfce7;color:#166534}
+.badge.paused{background:#fef9c3;color:#854d0e}
+.badge.archived{background:#e2e8f0;color:#475569}
 .badge.positive{background:#dcfce7;color:#166534}
 .badge.negative{background:#fee2e2;color:#991b1b}
+.badge.flat{background:#f1f5f9;color:#64748b}
 .btn{background:var(--primary);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px}
 .btn:hover{opacity:.9}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.ghost{background:#eef0f7;color:#555}
 .btn.green{background:#16a34a}
-.status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-.dot-ok{background:#16a34a}
-.dot-warn{background:#f59e0b}
-.dot-err{background:#dc2626}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
-.loading{color:var(--muted);padding:20px;text-align:center}
+.btn.red{background:#dc2626}
+.btn.sm{padding:5px 12px;font-size:13px}
+.btn.gray{background:#64748b}
 .muted{color:var(--muted);font-size:12px}
-.chart{height:340px}
 .mt{margin-top:16px}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-pre.report-body{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.7;background:#f8f9fc;padding:16px;border-radius:8px;max-height:520px;overflow:auto}
-.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-@media(max-width:900px){.config-grid{grid-template-columns:1fr}}
+.mb{margin-bottom:16px}
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px}
+.agent-card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.06);cursor:pointer;border:2px solid transparent;transition:all .15s}
+.agent-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1)}
+.agent-card.selected{border-color:var(--primary)}
+.agent-card h3{font-size:16px;color:#1e293b;display:flex;justify-content:space-between;align-items:center}
+.agent-card .desc{font-size:13px;color:var(--muted);margin:8px 0;min-height:36px}
+.agent-card .meta{font-size:12px;color:#555;display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.agent-card .actions{display:flex;gap:8px;flex-wrap:wrap}
+.ret-big{font-size:22px;font-weight:700}
+.layout{display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:13px;color:#555;margin-bottom:5px}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}
+.form-row textarea{resize:vertical;min-height:60px}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{outline:none;border-color:var(--primary)}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+.modal.open{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:26px;width:100%;max-width:560px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+.modal-box h2{margin-bottom:18px;color:#1e293b}
+.cfg-model-row{display:flex;gap:8px;align-items:flex-start}
+.cfg-model-row select{flex:1}
+.cfg-refresh{flex-shrink:0;padding:8px 12px;border:1px solid #ddd;border-radius:6px;background:#f8fafc;color:#475569;font-size:12px;cursor:pointer;white-space:nowrap}
+.cfg-refresh:disabled{opacity:.6;cursor:wait}
+.cfg-refresh-note{font-size:11px;color:var(--muted);margin-top:5px;min-height:14px}
+.chat-box{background:var(--card);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);padding:16px;height:560px;display:flex;flex-direction:column}
+.chat-msgs{flex:1;overflow-y:auto;padding:8px 4px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:80%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+.msg.assistant{align-self:flex-start;background:#f1f5f9;color:#1e293b;border-bottom-left-radius:4px}
+.msg .meta{font-size:11px;color:var(--muted);margin-bottom:4px}
+.chat-input{display:flex;gap:10px;margin-top:12px}
+.chat-input input{flex:1;padding:12px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+.chat-input input:focus{outline:none;border-color:var(--primary)}
+.tool-block{margin:4px 0;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;align-self:flex-start;width:calc(80% - 8px)}
+.tool-block .tool-name{color:var(--primary);font-weight:600}
+.tool-block .tool-args{color:#475569;font-family:ui-monospace,monospace;font-size:12px;margin-top:4px;white-space:pre-wrap;word-break:break-all}
+.tool-block .tool-result{color:#166534;font-size:12px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
+.typing::after{content:'▍';animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0}}
 .cfg-group{background:var(--card);border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
 .cfg-group h3{font-size:15px;margin-bottom:14px;color:#1e293b;padding-bottom:8px;border-bottom:1px solid #eee}
 .cfg-item{margin-bottom:12px}
@@ -63,545 +90,596 @@ pre.report-body{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,mon
 .cfg-item label .desc{color:var(--muted);font-weight:400}
 .cfg-item input,.cfg-item select{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
 .cfg-item input:focus,.cfg-item select:focus{outline:none;border-color:var(--primary)}
-.cfg-model-row{display:flex;gap:8px;align-items:flex-start}
-.cfg-model-row select{flex:1}
-.cfg-refresh{flex-shrink:0;padding:8px 12px;border:1px solid #ddd;border-radius:6px;background:#f8fafc;color:#475569;font-size:12px;cursor:pointer;white-space:nowrap}
-.cfg-refresh:hover{background:#eef2f7;border-color:#cbd5e1}
-.cfg-refresh:disabled{opacity:.6;cursor:wait}
-.cfg-refresh.ok{border-color:#22c55e;color:#16a34a;background:#f0fdf4}
-.cfg-refresh.err{border-color:#ef4444;color:#dc2626;background:#fef2f2}
-.cfg-refresh-note{font-size:11px;color:var(--muted);margin-top:5px;min-height:14px}
-.report-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-.tab-badge{display:inline-block;padding:4px 14px;border-radius:20px;border:1px solid #ddd;cursor:pointer;font-size:13px;color:#666}
-.tab-badge.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.config-grid{grid-template-columns:1fr}}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:#f8f9fc;border-radius:10px;padding:14px}
+.stat .l{font-size:12px;color:var(--muted)}
+.stat .v{font-size:20px;font-weight:700;color:#1e293b;margin-top:4px}
+.chart{height:300px}
 .tip{background:#fff7ed;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;font-size:13px;color:#7c4a03;margin-bottom:16px}
+.empty{color:var(--muted);text-align:center;padding:30px}
 </style>
 </head>
 <body>
-
 <div class="header">
-  <div>
-    <h1>AI自主进化选股系统</h1>
-    <div class="sub">LLM 策略生成 · 模拟竞技场 · 达尔文进化</div>
-  </div>
-  <div style="display:flex;align-items:center;gap:16px">
-    <div class="sub" id="nowText"></div>
-    <span id="providerBadge" class="badge pending">检查 LLM...</span>
-  </div>
+  <h1>AI 交易 Agent 系统</h1>
+  <div class="sub" id="sysInfo">加载中…</div>
 </div>
-
 <div class="nav">
-  <button class="active" data-tab="overview" onclick="switchTab('overview')">总览</button>
-  <button data-tab="reports" onclick="switchTab('reports')">报告</button>
+  <button class="active" data-tab="agents" onclick="switchTab('agents')">交易 Agent</button>
+  <button data-tab="chat" onclick="switchTab('chat')">对话</button>
+  <button data-tab="ranking" onclick="switchTab('ranking')">收益排名</button>
   <button data-tab="config" onclick="switchTab('config')">系统配置</button>
-  <button data-tab="evolution" onclick="switchTab('evolution')">进化中心</button>
 </div>
-
 <div class="container">
 
-  <!-- ===================== 总览 ===================== -->
-  <div id="tab-overview" class="tab active">
-    <div class="cards">
-      <div class="card"><div class="label">活跃策略</div><div class="value" id="statStrategies">-</div></div>
-      <div class="card"><div class="label">竞技场总资产</div><div class="value" id="statCapital">-</div></div>
-      <div class="card"><div class="label">平均收益</div><div class="value" id="statAvgReturn">-</div></div>
-      <div class="card"><div class="label">盈利策略</div><div class="value green" id="statPositive">-</div></div>
-      <div class="card"><div class="label">亏损策略</div><div class="value red" id="statNegative">-</div></div>
-    </div>
-
-    <div class="panel">
-      <h2>策略排行榜</h2>
-      <div id="leaderboard"><div class="loading">加载中...</div></div>
-    </div>
-
-    <div class="grid-2">
-      <div class="panel">
-        <h2>净值走势对比</h2>
-        <div id="navChart" class="chart"></div>
-      </div>
-      <div class="panel">
-        <h2>系统健康</h2>
-        <div id="healthInfo"><div class="loading">加载中...</div></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>策略详情</h2>
-      <div class="detail-grid">
-        <div>
-          <h3 style="font-size:15px;color:#555;margin-bottom:12px">基础信息</h3>
-          <div id="strategyInfo"><div class="loading">点击排行榜中的策略查看详情</div></div>
-        </div>
-        <div>
-          <h3 style="font-size:15px;color:#555;margin-bottom:12px">最新交易</h3>
-          <div id="strategyTrades"><div class="loading">-</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===================== 报告 ===================== -->
-  <div id="tab-reports" class="tab">
-    <div class="tip">系统每日/每周/每月自动生成运行报告（若已启用调度器）。也可手动生成，报告将保存到历史记录。</div>
-    <div class="panel">
-      <h2>运行报告</h2>
-      <div class="report-toolbar">
-        <span class="tab-badge active" data-rt="daily" onclick="selectReportType('daily')">日报</span>
-        <span class="tab-badge" data-rt="weekly" onclick="selectReportType('weekly')">周报</span>
-        <span class="tab-badge" data-rt="monthly" onclick="selectReportType('monthly')">月报</span>
-        <span style="flex:1"></span>
-        <button class="btn green" onclick="generateReport()">生成日报</button>
-      </div>
-      <div id="reportContent"><div class="loading">选择报告类型或点击生成</div></div>
-      <h3 style="font-size:15px;color:#555;margin:20px 0 10px">历史记录</h3>
-      <div id="reportHistory"><div class="loading">加载中...</div></div>
-    </div>
-  </div>
-
-  <!-- ===================== 配置 ===================== -->
-  <div id="tab-config" class="tab">
-    <div class="tip">配置保存在数据库并同步写入 .env。大模型配置保存后<b>立即生效</b>；系统运行时间等调度参数在<b>服务重启后</b>生效。敏感字段留空或保持打码值则不修改。</div>
-    <div class="config-grid">
-      <div id="configGroups"></div>
+  <!-- ============ Agent 管理 ============ -->
+  <div class="tab active" id="tab-agents">
+    <div class="layout">
       <div>
-        <div class="panel">
-          <h2>保存配置</h2>
-          <div id="configSaveInfo" class="muted" style="margin-bottom:12px">修改上方配置后点击保存。</div>
-          <button class="btn" id="btnSaveConfig" onclick="saveConfig()">保存全部配置</button>
-          <button class="btn ghost" style="margin-left:10px" onclick="loadConfig()">重新加载</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2 style="color:#1e293b">我的交易 Agent</h2>
+          <button class="btn" onclick="openAgentModal()">+ 新建 Agent</button>
         </div>
-        <div class="panel">
-          <h2>LLM 连接测试</h2>
-          <div id="llmTestResult" class="muted" style="margin-bottom:12px">可测试当前默认模型是否可用。</div>
-          <button class="btn ghost" onclick="testLLM()">测试连接</button>
-        </div>
+        <div id="agentList" class="agent-grid"></div>
+      </div>
+      <div id="agentDetail" class="panel"><div class="empty">选择一个 Agent 查看详情</div></div>
+    </div>
+  </div>
+
+  <!-- ============ 对话 ============ -->
+  <div class="tab" id="tab-chat">
+    <div class="panel">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:14px;color:#555">对话对象：</label>
+        <select id="chatAgentSel" style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;min-width:220px" onchange="loadChat()"></select>
+        <button class="btn ghost sm" onclick="loadChat()">刷新</button>
+      </div>
+    </div>
+    <div class="chat-box">
+      <div class="chat-msgs" id="chatMsgs"><div class="empty">选择 Agent 开始对话</div></div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="例如：用低市盈率+高动量帮我选 5 只股票，并买入……" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn" id="chatSendBtn" onclick="sendChat()">发送</button>
       </div>
     </div>
   </div>
 
-  <!-- ===================== 进化 ===================== -->
-  <div id="tab-evolution" class="tab">
-    <div class="cards">
-      <div class="card"><div class="label">已执行周期</div><div class="value" id="evoCycles">-</div></div>
-      <div class="card"><div class="label">累计上线策略</div><div class="value" id="evoAdded">-</div></div>
-      <div class="card"><div class="label">当前竞技场</div><div class="value" id="evoArena">-</div></div>
+  <!-- ============ 收益排名 ============ -->
+  <div class="tab" id="tab-ranking">
+    <div class="panel">
+      <h2>Agent 收益排名</h2>
+      <table id="rankTable">
+        <thead><tr><th>排名</th><th>Agent</th><th>状态</th><th>累计收益</th><th>总资产</th><th>持仓</th><th>最新净值日</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
     <div class="panel">
-      <h2>进化历史</h2>
-      <div id="evolutionHistory"><div class="loading">加载中...</div></div>
-    </div>
-    <div class="panel" style="text-align:center">
-      <button class="btn" id="btnEvolve" onclick="triggerEvolution()">手动触发一轮进化</button>
-      <span class="muted" style="margin-left:12px" id="evolveResult"></span>
+      <h2>收益对比</h2>
+      <div class="chart" id="rankChart"></div>
     </div>
   </div>
 
-  <div class="muted" style="text-align:center;padding:24px 0">
-    仅供学习研究使用，不构成任何投资建议
+  <!-- ============ 系统配置 ============ -->
+  <div class="tab" id="tab-config">
+    <div class="tip">大模型配置保存后立即生效；每个 Agent 也可在「交易 Agent → 编辑」中单独设置自己的大模型版本。</div>
+    <div class="config-grid" id="configGroups"></div>
+    <div style="display:flex;gap:12px;align-items:center">
+      <button class="btn green" id="btnSaveConfig" onclick="saveConfig()">保存配置</button>
+      <span id="configSaveInfo" class="muted"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 新建/编辑 Agent 弹窗 ============ -->
+<div class="modal" id="agentModal">
+  <div class="modal-box">
+    <h2 id="agentModalTitle">新建 Agent</h2>
+    <div class="form-row"><label>名称 *</label><input id="f_name" placeholder="如：价值投资 Agent"></div>
+    <div class="form-row"><label>定位描述</label><textarea id="f_description" placeholder="如：专注于低估值蓝筹股的价值投资"></textarea></div>
+    <div class="form-row"><label>系统提示词（可选，自定义行为）</label><textarea id="f_system_prompt" placeholder="可留空使用默认提示词"></textarea></div>
+    <div class="form-row"><label>大模型服务商</label>
+      <select id="f_provider" onchange="providerChanged()">
+        <option value="deepseek">DeepSeek</option>
+        <option value="qwen">通义千问</option>
+        <option value="moonshot">Moonshot</option>
+        <option value="glm">智谱GLM</option>
+        <option value="ollama">本地Ollama</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </div>
+    <div class="form-row"><label>API Key（留空则使用系统默认配置）</label><input id="f_api_key" type="password" placeholder="sk-..."></div>
+    <div class="form-row"><label>Base URL（可选，默认使用服务商官方地址）</label><input id="f_base_url" placeholder="https://..."></div>
+    <div class="form-row"><label>模型版本</label>
+      <div class="cfg-model-row">
+        <select id="f_model"></select>
+        <button type="button" class="cfg-refresh" onclick="fetchModels()">服务器模型</button>
+      </div>
+      <input id="f_model_custom" style="display:none;margin-top:6px" placeholder="输入自定义模型名">
+      <div class="cfg-refresh-note" id="f_model_note"></div>
+    </div>
+    <div class="form-row"><label>初始资金（元）</label><input id="f_capital" type="number" value="100000"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn ghost" onclick="closeAgentModal()">取消</button>
+      <button class="btn green" onclick="saveAgent()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 定时任务弹窗 ============ -->
+<div class="modal" id="taskModal">
+  <div class="modal-box">
+    <h2>添加定时自动任务</h2>
+    <div class="form-row"><label>类型</label>
+      <select id="t_type" onchange="document.getElementById('t_time_row').style.display=this.value==='daily'?'':'none';document.getElementById('t_interval_row').style.display=this.value==='interval'?'':'none'">
+        <option value="daily">每日（交易日 指定时间）</option>
+        <option value="interval">间隔（每 N 小时）</option>
+      </select>
+    </div>
+    <div class="form-row" id="t_time_row"><label>触发时间（HH:MM）</label><input id="t_time" type="time" value="09:30"></div>
+    <div class="form-row" id="t_interval_row" style="display:none"><label>间隔小时</label><input id="t_interval" type="number" value="4" min="0.5" step="0.5"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn ghost" onclick="closeTaskModal()">取消</button>
+      <button class="btn green" onclick="saveTask()">添加</button>
+    </div>
   </div>
 </div>
 
 <script>
-let selectedStrategy = null;
-let currentReportType = 'daily';
-const TYPE_NAMES = {daily:'日报', weekly:'周报', monthly:'月报'};
-
-async function api(url, options={}) {
-  const resp = await fetch(url, options);
-  if (resp.status === 401) {
-    alert('需要认证（admin/admin123）');
-    throw new Error('unauthorized');
-  }
-  return resp.json();
-}
-
-function switchTab(name) {
-  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
-  if (name === 'reports') { loadReportHistory(); if (currentReportType) loadReportContent(); }
-  if (name === 'config') loadConfig();
-  if (name === 'evolution') loadEvolutionHistory();
-}
-
-setInterval(() => {
-  const n = new Date();
-  document.getElementById('nowText').textContent = n.toLocaleString('zh-CN');
-}, 1000);
-
-// ===================== 总览 =====================
-async function loadLeaderboard() {
-  try {
-    const rows = await api('/api/leaderboard?limit=20');
-    const tb = document.getElementById('leaderboard');
-    if (!rows || rows.length === 0) {
-      tb.innerHTML = '<div class="loading">竞技场暂无策略，前往「进化中心」触发进化</div>';
-      return;
-    }
-    let html = '<table><thead><tr><th></th><th>策略</th><th>类型</th>' +
-      '<th>累计收益</th><th>夏普</th><th>最大回撤</th><th>胜率</th><th>总资产</th><th>持仓</th></tr></thead><tbody>';
-    rows.forEach((r, i) => {
-      const tr = typeof r.total_return === 'number' ? r.total_return : 0;
-      const cls = tr >= 0 ? 'badge positive' : 'badge negative';
-      html += `<tr onclick="showDetail('${r.strategy_id}')" style="cursor:pointer">
-        <td>${i+1}</td>
-        <td><strong>${r.name || r.strategy_id}</strong></td>
-        <td>${r.type || '-'}</td>
-        <td><span class="${cls}">${(tr*100).toFixed(2)}%</span></td>
-        <td>${r.sharpe?.toFixed(2) ?? '-'}</td>
-        <td>${r.max_drawdown!=null ? (r.max_drawdown*100).toFixed(2)+'%' : '-'}</td>
-        <td>${r.win_rate!=null ? (r.win_rate*100).toFixed(0)+'%' : '-'}</td>
-        <td>${r.total_value!=null ? r.total_value.toLocaleString() : '-'}</td>
-        <td>${r.positions ?? '-'}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    tb.innerHTML = html;
-  } catch(e) { document.getElementById('leaderboard').innerHTML = '<div class="loading">加载失败</div>'; }
-}
-
-async function loadArenaStats() {
-  try {
-    const s = await api('/api/arena/stats');
-    document.getElementById('statStrategies').textContent = s.total_strategies ?? '-';
-    document.getElementById('statCapital').textContent = s.total_capital ? s.total_capital.toLocaleString() : '-';
-    document.getElementById('statAvgReturn').textContent = s.avg_return!=null ? (s.avg_return*100).toFixed(2)+'%' : '-';
-    document.getElementById('statPositive').textContent = s.positive_count ?? '-';
-    document.getElementById('statNegative').textContent = s.negative_count ?? '-';
-  } catch(e) {}
-}
-
-async function loadNavChart() {
-  try {
-    const rows = await api('/api/leaderboard?metric=total_return&limit=5');
-    const chartDiv = document.getElementById('navChart');
-    if (!rows || rows.length === 0) {
-      chartDiv.innerHTML = '<div class="loading">暂无数据</div>';
-      return;
-    }
-    const traces = [];
-    for (const r of rows) {
-      const hist = await api(`/api/backtest/${r.strategy_id}?days=120`);
-      if (hist && hist.length > 0) {
-        traces.push({x: hist.map(h => h.date), y: hist.map(h => h.nav), name: r.name || r.strategy_id, type: 'scatter', mode: 'lines'});
-      }
-    }
-    const bench = await api('/api/benchmark');
-    if (bench && bench.length > 1) {
-      traces.push({x: bench.map(b=>b.date), y: bench.map(b=>b.nav*100000), name:'基准(沪深300)', type:'scatter', mode:'lines', line:{dash:'dash'}});
-    }
-    Plotly.newPlot(chartDiv, traces, {
-      title: {text: '策略净值曲线', font:{size:14}},
-      margin: {t: 40, l: 60, r: 20, b: 40},
-      legend: {orientation: 'h'},
-      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)'
-    }, {responsive: true});
-  } catch(e) {}
-}
-
-async function loadHealth() {
-  try {
-    const h = await api('/api/health');
-    const s = h.system || {};
-    const mkDot = ok => ok ? 'dot-ok' : 'dot-err';
-    document.getElementById('healthInfo').innerHTML = `
-      <div style="margin-bottom:12px"><span class="status-dot ${mkDot(h.status==='healthy')}"></span>系统状态: <strong>${h.status==='healthy'?'健康':'异常'}</strong></div>
-      <table><thead><tr><th>项</th><th>状态</th></tr></thead><tbody>
-        <tr><td>数据库</td><td><span class="status-dot ${mkDot(h.checks?.database?.status==='ok')}"></span>${h.checks?.database?.status || '-'}</td></tr>
-        <tr><td>Redis</td><td><span class="status-dot ${mkDot(h.checks?.redis?.status==='ok')}"></span>${h.checks?.redis?.status || '-'}</td></tr>
-        <tr><td>CPU</td><td>${s.cpu_percent ?? '-'}%</td></tr>
-        <tr><td>内存</td><td>${s.memory_percent ?? '-'}% (${s.memory_used_gb ?? '-'} GB)</td></tr>
-        <tr><td>磁盘</td><td>${s.disk_percent ?? '-'}%</td></tr>
-      </tbody></table>`;
-  } catch(e) {}
-}
-
-async function showDetail(id) {
-  selectedStrategy = id;
-  try {
-    const d = await api('/api/strategy/' + id);
-    const info = d.info || {};
-    const st = d.stats || {};
-    const conds = (info.conditions || []).map(c =>
-      `<tr><td>${c.factor}</td><td>${c.operator} ${Array.isArray(c.value)?c.value.join('~'):c.value}</td><td class="muted">${c.rationale||''}</td></tr>`
-    ).join('');
-    document.getElementById('strategyInfo').innerHTML = `
-      <p><strong>${info.name||id}</strong> <span class="badge active">${info.type||'hybrid'}</span> <span class="muted">gen ${info.generation??0}</span></p>
-      <p class="muted" style="margin:8px 0">核心假设: ${info.core_hypothesis||'-'}</p>
-      <p class="muted">止损 ${info.stop_loss} / 止盈 ${info.stop_profit} / 最大持仓 ${info.max_position}</p>
-      <p class="muted">调仓频率: ${info.rebalance_freq||'-'} | 风险提示: ${info.risk_warning||'-'}</p>
-      <p class="muted" style="margin-top:8px">夏普 ${st.sharpe?.toFixed(2)??'-'} | 最大回撤 ${st.max_drawdown!=null?(st.max_drawdown*100).toFixed(2)+'%':'-'} | 胜率 ${st.win_rate!=null?(st.win_rate*100).toFixed(0)+'%':'-'}</p>
-      ${conds ? '<table style="margin-top:10px"><thead><tr><th>因子</th><th>条件</th><th>逻辑</th></tr></thead><tbody>'+conds+'</tbody></table>' : ''}
-      <div style="margin-top:8px"><strong>排名因子:</strong> <span class="muted">${(info.ranking_factors||[]).map(r=>`${r.factor}(${r.weight})`).join(', ')||'-'}</span></div>`;
-    const trades = d.trades || [];
-    if (trades.length === 0) {
-      document.getElementById('strategyTrades').innerHTML = '<div class="loading">暂无交易</div>';
-    } else {
-      document.getElementById('strategyTrades').innerHTML =
-        '<table><thead><tr><th>日期</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>原因</th></tr></thead><tbody>' +
-        trades.slice(-10).reverse().map(t =>
-          `<tr><td>${t.trade_date}</td><td>${t.ts_code}</td><td><span class="badge ${t.direction==='buy'?'positive':'negative'}">${t.direction==='buy'?'买入':'卖出'}</span></td><td>${t.price}</td><td>${t.shares}</td><td class="muted">${t.reason||''}</td></tr>`
-        ).join('') + '</tbody></table>';
-    }
-  } catch(e) {}
-}
-
-// ===================== 报告 =====================
-function selectReportType(type) {
-  currentReportType = type;
-  document.querySelectorAll('#tab-reports .tab-badge').forEach(b => b.classList.toggle('active', b.dataset.rt === type));
-  document.querySelectorAll('#tab-reports .btn.green').forEach(b => b.textContent = '生成' + TYPE_NAMES[type]);
-  loadReportContent();
-}
-
-async function loadReportContent() {
-  try {
-    const rows = await api('/api/reports?report_type=' + currentReportType + '&limit=1');
-    const el = document.getElementById('reportContent');
-    if (!rows || rows.length === 0) {
-      el.innerHTML = '<div class="loading">暂无' + TYPE_NAMES[currentReportType] + '，点击右上角生成</div>';
-      return;
-    }
-    el.innerHTML = `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${rows[0].title}</h3>` +
-      `<pre class="report-body">${escapeHtml(rows[0].content || '')}</pre>`;
-  } catch(e) {}
-}
-
-async function loadReportHistory() {
-  try {
-    const rows = await api('/api/reports?limit=30');
-    const el = document.getElementById('reportHistory');
-    if (!rows || rows.length === 0) { el.innerHTML = '<div class="loading">暂无报告历史</div>'; return; }
-    el.innerHTML = '<table><thead><tr><th>类型</th><th>标题</th><th>时间</th><th></th></tr></thead><tbody>' +
-      rows.map(r => `<tr><td><span class="badge active">${TYPE_NAMES[r.report_type]||r.report_type}</span></td>
-        <td>${r.title}</td><td class="muted">${(r.created_at||'').slice(0,16)}</td>
-        <td><button class="btn ghost" style="padding:4px 12px" onclick="viewReport(${r.id})">查看</button></td></tr>`).join('') +
-      '</tbody></table>';
-  } catch(e) {}
-}
-
-async function viewReport(id) {
-  try {
-    const rows = await api('/api/reports?limit=100');
-    const r = rows.find(x => x.id === id);
-    if (r) {
-      document.getElementById('reportContent').innerHTML =
-        `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${r.title}</h3><pre class="report-body">${escapeHtml(r.content||'')}</pre>`;
-      window.scrollTo({top:0, behavior:'smooth'});
-    }
-  } catch(e) {}
-}
-
-async function generateReport() {
-  const btns = document.querySelectorAll('#tab-reports .btn.green');
-  btns.forEach(b => { b.disabled = true; b.textContent = '生成中...'; });
-  try {
-    const r = await api('/api/reports/generate?report_type=' + currentReportType, {method:'POST'});
-    document.getElementById('reportContent').innerHTML =
-      `<h3 style="font-size:15px;color:#555;margin-bottom:10px">${r.latest?.title||'生成完成'}</h3><pre class="report-body">${escapeHtml(r.content||'')}</pre>`;
-    loadReportHistory();
-  } catch(e) { alert('生成失败: ' + e.message); }
-  btns.forEach(b => { b.disabled = false; b.textContent = '生成' + TYPE_NAMES[currentReportType]; });
-}
-
-// ===================== 配置 =====================
+const PROVIDERS = ['deepseek','qwen','moonshot','glm','ollama','openai'];
+const MODEL_PRESETS = {
+  deepseek:['deepseek-chat','deepseek-reasoner'],
+  qwen:['qwen-plus','qwen-turbo','qwen-max','qwen-long','qwen2.5-72b-instruct','qwen3-32b'],
+  moonshot:['moonshot-v1-8k','moonshot-v1-32k','moonshot-v1-128k','kimi-latest','kimi-k2-0711-preview'],
+  glm:['glm-4-plus','glm-4-air','glm-4-flash','glm-4-long','glm-4.5','glm-4.5-air'],
+  ollama:['qwen2.5:7b','qwen3:8b','qwen2.5:14b','llama3.1:8b','deepseek-r1:7b','glm4:9b'],
+  openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo','o3-mini','o1'],
+};
+let agents = [];
+let selectedAgentId = null;
 let configData = null;
 
-async function loadConfig() {
-  try {
-    const c = await api('/api/config');
-    configData = c;
-    renderConfigGroups(c);
-  } catch(e) { document.getElementById('configGroups').innerHTML = '<div class="loading">配置加载失败</div>'; }
+function switchTab(name){
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='agents'){ loadAgents(); }
+  if(name==='chat'){ loadChatSelect(); loadChat(); }
+  if(name==='ranking'){ loadRanking(); }
+  if(name==='config'){ loadConfig(); }
 }
 
-function renderConfigGroups(c) {
-  const groups = {};
-  c.schema.forEach(item => {
-    if (!groups[item.category]) groups[item.category] = [];
-    groups[item.category].push(item);
-  });
-  const CAT_NAMES = c.category_names || {};
-  let html = '';
-  Object.keys(groups).forEach(cat => {
-    html += `<div class="cfg-group"><h3>${CAT_NAMES[cat] || cat}</h3>`;
-    groups[cat].forEach(item => {
-      let control = '';
-      if (item.key === 'llm.default_provider') {
-        control = `<select id="cfg_${item.key}">` +
-          ['deepseek','qwen','moonshot','glm','ollama','openai'].map(p =>
-            `<option value="${p}" ${item.value===p?'selected':''}>${p}</option>`).join('') +
-          '</select>';
-      } else if (item.key === 'evolution.enable_crossover') {
-        control = `<select id="cfg_${item.key}"><option value="true" ${item.value==='true'?'selected':''}>开启</option><option value="false" ${item.value!=='true'?'selected':''}>关闭</option></select>`;
-      } else if (item.options && item.options.length > 0) {
-        const provider = item.key.split('.')[1].replace('_model', '');
-        const known = item.options.includes(item.value);
-        const opts = item.options.map(o =>
-          `<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('');
-        const customSel = known ? '' : ' selected';
-        control = `<div class="cfg-model-row">` +
-          `<select id="cfg_${item.key}" onchange="modelSelectChanged('${item.key}')">${opts}` +
-          `<option value="__custom__"${customSel}>自定义…</option></select>` +
-          `<button type="button" class="cfg-refresh" onclick="fetchRemoteModels('${provider}', '${item.key}')">服务器模型</button></div>` +
-          `<input id="cfg_custom_${item.key}" type="text" ${known?'style="display:none"':''} placeholder="输入自定义模型名" value="${known?'' : escapeHtml(item.value)}" style="margin-top:6px;width:calc(100% - 130px)">` +
-          `<div id="cfg_note_${item.key}" class="cfg-refresh-note"></div>`;
-      } else {
-        control = `<input id="cfg_${item.key}" type="text" value="${escapeHtml(item.value)}" placeholder="${escapeHtml(item.default||'')}">`;
+async function api(path, opts={}){
+  const r = await fetch(path, opts);
+  if(!r.ok){ let d=null; try{d=await r.json()}catch(e){} throw new Error((d&&d.detail)||r.status); }
+  return r.json();
+}
+function pct(v){ return v===null||v===undefined ? '—' : (v*100).toFixed(2)+'%'; }
+function money(v){ return v===null||v===undefined ? '—' : Number(v).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============ Agent 列表与详情 ============
+async function loadAgents(){
+  try{ agents = await api('/api/agents'); }catch(e){ agents=[]; }
+  const el = document.getElementById('agentList');
+  if(!agents.length){ el.innerHTML='<div class="empty">还没有 Agent，点击「+ 新建 Agent」创建第一个</div>'; return; }
+  el.innerHTML = agents.map(a=>{
+    const ret = a.cumulative_return;
+    const retHtml = ret===null||ret===undefined
+      ? '<span class="muted">暂无绩效</span>'
+      : `<span class="ret-big ${ret>=0?'badge positive':'badge negative'}">${pct(ret)}</span>`;
+    const badgeCls = a.status==='running'?'running':a.status==='paused'?'paused':'archived';
+    return `<div class="agent-card ${a.id===selectedAgentId?'selected':''}" onclick="selectAgent('${a.id}')">
+      <h3>${esc(a.name)} <span class="badge ${badgeCls}">${a.status}</span></h3>
+      <div class="desc">${esc(a.description||'（无描述）')}</div>
+      <div class="meta">
+        <span>${a.llm_provider} / ${esc(a.llm_model||'默认')}</span>
+        <span>资金 ${money(a.initial_capital)}</span>
+        <span>持仓 ${a.positions_count||0}</span>
+      </div>
+      ${retHtml}
+      <div class="actions mt" onclick="event.stopPropagation()">
+        <button class="btn sm green" onclick="switchTab('chat');document.getElementById('chatAgentSel').value='${a.id}';loadChat()">对话</button>
+        <button class="btn sm ghost" onclick="openAgentModal('${a.id}')">编辑</button>
+        ${a.status==='running'
+          ? `<button class="btn sm gray" onclick="setAgentStatus('${a.id}','paused')">暂停</button>`
+          : `<button class="btn sm green" onclick="setAgentStatus('${a.id}','running')">启动</button>`}
+        <button class="btn sm red" onclick="deleteAgent('${a.id}')">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function selectAgent(id){
+  selectedAgentId = id;
+  loadAgents();
+  const detail = await api('/api/agents/'+id);
+  renderAgentDetail(detail);
+}
+
+function renderAgentDetail(a){
+  const p = a.portfolio || {cash:0,total_value:0,cumulative_return:0,positions:[]};
+  const stats = `
+    <div class="stats-row">
+      <div class="stat"><div class="l">总资产</div><div class="v">${money(p.total_value)}</div></div>
+      <div class="stat"><div class="l">现金</div><div class="v">${money(p.cash)}</div></div>
+      <div class="stat"><div class="l">累计收益</div><div class="v ${(p.cumulative_return||0)>=0?'':'red'}" style="color:${(p.cumulative_return||0)>=0?'#16a34a':'#dc2626'}">${pct(p.cumulative_return)}</div></div>
+      <div class="stat"><div class="l">持仓数</div><div class="v">${p.positions_count||0}</div></div>
+      <div class="stat"><div class="l">模型</div><div class="v" style="font-size:14px">${a.llm_provider}/${esc(a.llm_model||'默认')}</div></div>
+      <div class="stat"><div class="l">最后活跃</div><div class="v" style="font-size:13px">${a.last_active_at?esc(a.last_active_at.split('T')[0]):'—'}</div></div>
+    </div>`;
+  const posRows = (p.positions||[]).map(x=>`<tr>
+    <td>${esc(x.name)}</td><td>${esc(x.ts_code)}</td><td>${x.shares}</td>
+    <td>${x.avg_cost}</td><td>${x.current_price}</td>
+    <td>${money(x.market_value)}</td>
+    <td><span class="badge ${x.pnl_pct>=0?'positive':'negative'}">${(x.pnl_pct*100).toFixed(2)}%</span></td></tr>`).join('');
+  const trades = await api('/api/agents/'+a.id+'/trades',{method:'GET'}).catch(()=>[]);
+  const tradeRows = (trades||[]).slice(0,20).map(t=>`<tr>
+    <td>${t.trade_date}</td><td>${esc(t.ts_code)}</td>
+    <td><span class="badge ${t.direction==='buy'?'positive':'negative'}">${t.direction==='buy'?'买入':'卖出'}</span></td>
+    <td>${t.price}</td><td>${t.shares}</td>
+    <td class="muted">${esc(t.reason)}</td></tr>`).join('');
+  const mem = (a.memories||[]).map(m=>`<div style="padding:8px 12px;background:#f8f9fc;border-radius:8px;margin-bottom:6px;font-size:13px">
+    <span class="badge ${m.memory_type==='instruction'?'pending':'flat'}" style="margin-right:8px">${m.memory_type==='instruction'?'策略':'经验'}</span>${esc(m.content)}</div>`).join('');
+  const tasks = (a.tasks||[]).map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8f9fc;border-radius:8px;margin-bottom:6px;font-size:13px">
+    <span>${t.schedule_type==='daily'?'每日 '+t.schedule_time:'每 '+t.interval_hours+' 小时'}
+      <span class="badge ${t.enabled?'running':'flat'}">${t.enabled?'启用':'停用'}</span>
+      ${t.last_run_at?`<span class="muted">上次 ${esc(t.last_run_at.split('T')[0]+' '+t.last_run_at.split('T')[1].slice(0,5))}</span>`:''}
+    </span>
+    <span>
+      <button class="btn sm ghost" onclick="toggleTask(${t.id}, ${!t.enabled})">${t.enabled?'停用':'启用'}</button>
+      <button class="btn sm red" onclick="deleteTask('${a.id}',${t.id})">删除</button>
+    </span></div>`).join('') || '<div class="empty">暂无定时任务</div>';
+
+  document.getElementById('agentDetail').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <h2 style="border:none;margin:0">${esc(a.name)} <span class="badge ${a.status==='running'?'running':a.status==='paused'?'paused':'archived'}">${a.status}</span></h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn sm green" onclick="switchTab('chat');document.getElementById('chatAgentSel').value='${a.id}';loadChat()">去对话</button>
+        <button class="btn sm" onclick="runAgent('${a.id}')">手动执行一次</button>
+        <button class="btn sm ghost" onclick="openTaskModal('${a.id}')">+ 定时任务</button>
+      </div>
+    </div>
+    ${stats}
+    <div class="panel" style="box-shadow:none;padding:0"><h2>持仓明细</h2>
+      <table><thead><tr><th>名称</th><th>代码</th><th>股数</th><th>成本</th><th>现价</th><th>市值</th><th>盈亏</th></tr></thead>
+      <tbody>${posRows||'<tr><td colspan="7"><div class="empty">暂无持仓</div></td></tr>'}</tbody></table>
+    </div>
+    <div class="panel" style="box-shadow:none;padding:0"><h2>最近成交</h2>
+      <table><thead><tr><th>日期</th><th>代码</th><th>方向</th><th>价格</th><th>股数</th><th>理由</th></tr></thead>
+      <tbody>${tradeRows||'<tr><td colspan="6"><div class="empty">暂无成交</div></td></tr>'}</tbody></table>
+    </div>
+    <div class="panel" style="box-shadow:none;padding:0"><h2>长期记忆</h2>
+      ${mem||'<div class="empty">暂无长期记忆，对话中告诉 Agent 策略后它会自动记住</div>'}
+    </div>
+    <div class="panel" style="box-shadow:none;padding:0"><h2>定时自动任务</h2>${tasks}</div>
+    <div class="panel" style="box-shadow:none;padding:0"><h2>净值走势</h2><div class="chart" id="detailChart"></div></div>`;
+  loadPerfChart(a.id);
+}
+
+async function loadPerfChart(id){
+  const perf = await api('/api/agents/'+id+'/performance').catch(()=>[]);
+  if(!perf || !perf.length){ return; }
+  const dates = perf.map(x=>x.trade_date);
+  const navs = perf.map(x=>x.nav);
+  Plotly.newPlot('detailChart', [{x:dates,y:navs,type:'scatter',mode:'lines',name:'净值',line:{color:'#667eea'}}],
+    {margin:{l:50,r:20,t:20,b:40},yaxis:{title:'净值'}},{displayModeBar:false});
+}
+
+// ============ Agent 启停 / 删除 / 手动执行 ============
+async function setAgentStatus(id, status){
+  await api('/api/agents/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  loadAgents(); if(selectedAgentId===id) selectAgent(id);
+}
+async function deleteAgent(id){
+  if(!confirm('确认删除该 Agent 及其全部记忆/持仓/记录？')) return;
+  await api('/api/agents/'+id,{method:'DELETE'});
+  if(selectedAgentId===id){ selectedAgentId=null; document.getElementById('agentDetail').innerHTML='<div class="empty">选择一个 Agent 查看详情</div>'; }
+  loadAgents(); loadChatSelect();
+}
+async function runAgent(id){
+  if(!confirm('立即触发该 Agent 自主决策一次（会调用大模型）？')) return;
+  await api('/api/agents/'+id+'/run',{method:'POST'});
+  alert('执行完成，请在对话页查看结果');
+  if(selectedAgentId===id) selectAgent(id);
+}
+
+// ============ 新建 / 编辑 Agent ============
+function providerChanged(){
+  const p = document.getElementById('f_provider').value;
+  const sel = document.getElementById('f_model');
+  sel.innerHTML = (MODEL_PRESETS[p]||[]).map(m=>`<option value="${m}">${m}</option>`).join('') + '<option value="__custom__">自定义…</option>';
+  modelSelectChanged();
+}
+function modelSelectChanged(){
+  const sel = document.getElementById('f_model');
+  const input = document.getElementById('f_model_custom');
+  const custom = sel.value==='__custom__';
+  input.style.display = custom?'':'none';
+}
+async function fetchModels(){
+  const provider = document.getElementById('f_provider').value;
+  const note = document.getElementById('f_model_note');
+  const btn = event.target; btn.disabled=true; btn.textContent='加载中…'; note.textContent='';
+  try{
+    const r = await fetch('/api/llm/remote-models?provider='+provider);
+    const d = await r.json();
+    if(d.error){ note.textContent='获取失败：'+d.error; }
+    else{
+      const all=[...new Set([...(d.models||[]),...(d.preset||[])])];
+      if(!all.length){ note.textContent='服务器未返回模型'; }
+      else{
+        const sel=document.getElementById('f_model');
+        sel.innerHTML=all.map(m=>`<option value="${m}">${m}</option>`).join('')+'<option value="__custom__">自定义…</option>';
+        note.textContent=(d.models||[]).length?`已从服务器获取 ${d.models.length} 个模型`:'已合并预设列表';
       }
-      const secretTag = item.secret ? '（敏感，留空保持原值）' : '';
-      html += `<div class="cfg-item"><label>${item.key} <span class="desc">- ${item.description}${secretTag}</span></label>${control}</div>`;
+    }
+  }catch(e){ note.textContent='请求失败：'+e.message; }
+  btn.disabled=false; btn.textContent='服务器模型';
+}
+let editingAgentId = null;
+function openAgentModal(id=null){
+  editingAgentId = id;
+  document.getElementById('agentModalTitle').textContent = id?'编辑 Agent':'新建 Agent';
+  const f=['f_name','f_description','f_system_prompt','f_provider','f_api_key','f_base_url','f_model','f_model_custom','f_capital'];
+  f.forEach(x=>{const el=document.getElementById(x); if(x==='f_api_key'){el.value='';} });
+  document.getElementById('f_model_note').textContent='';
+  providerChanged();
+  if(id){
+    const a = agents.find(x=>x.id===id);
+    if(a){
+      document.getElementById('f_name').value=a.name;
+      document.getElementById('f_description').value=a.description||'';
+      document.getElementById('f_system_prompt').value=a.system_prompt||'';
+      document.getElementById('f_provider').value=a.llm_provider||'deepseek';
+      document.getElementById('f_base_url').value=a.llm_base_url||'';
+      document.getElementById('f_capital').value=a.initial_capital;
+      providerChanged();
+      const sel=document.getElementById('f_model');
+      const preset=(MODEL_PRESETS[a.llm_provider]||[]);
+      if(a.llm_model && preset.includes(a.llm_model)){ sel.value=a.llm_model; }
+      else{
+        sel.value='__custom__';
+        document.getElementById('f_model_custom').value=a.llm_model||'';
+        modelSelectChanged();
+      }
+      document.getElementById('f_api_key').placeholder='留空保持不变（当前已配置）';
+    }
+  }
+  document.getElementById('agentModal').classList.add('open');
+}
+function closeAgentModal(){ document.getElementById('agentModal').classList.remove('open'); }
+async function saveAgent(){
+  const name = document.getElementById('f_name').value.trim();
+  if(!name){ alert('请填写名称'); return; }
+  let model = document.getElementById('f_model').value;
+  if(model==='__custom__') model = document.getElementById('f_model_custom').value.trim();
+  const payload = {
+    name,
+    description: document.getElementById('f_description').value.trim(),
+    system_prompt: document.getElementById('f_system_prompt').value.trim(),
+    llm_provider: document.getElementById('f_provider').value,
+    llm_base_url: document.getElementById('f_base_url').value.trim(),
+    llm_model: model,
+    initial_capital: parseFloat(document.getElementById('f_capital').value)||100000,
+  };
+  const key = document.getElementById('f_api_key').value.trim();
+  if(key) payload.llm_api_key = key;
+  try{
+    if(editingAgentId){ await api('/api/agents/'+editingAgentId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); }
+    else{ await api('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); }
+    closeAgentModal(); loadAgents(); loadChatSelect();
+    document.getElementById('sysInfo').textContent='Agent 已保存';
+  }catch(e){ alert('保存失败：'+e.message); }
+}
+
+// ============ 定时任务 ============
+let taskAgentId=null;
+function openTaskModal(agentId){ taskAgentId=agentId; document.getElementById('taskModal').classList.add('open'); }
+function closeTaskModal(){ document.getElementById('taskModal').classList.remove('open'); }
+async function saveTask(){
+  const type=document.getElementById('t_type').value;
+  const payload={
+    schedule_type:type,
+    schedule_time: document.getElementById('t_time').value||'09:30',
+    interval_hours: parseFloat(document.getElementById('t_interval').value)||4,
+  };
+  await api(`/api/agents/${taskAgentId}/tasks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  closeTaskModal(); selectAgent(taskAgentId);
+}
+async function toggleTask(taskId, enabled){
+  await api(`/api/agents/${selectedAgentId}/tasks/${taskId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
+  selectAgent(selectedAgentId);
+}
+async function deleteTask(agentId, taskId){
+  if(!confirm('删除该定时任务？')) return;
+  await api(`/api/agents/${agentId}/tasks/${taskId}`,{method:'DELETE'});
+  selectAgent(agentId);
+}
+
+// ============ 对话 ============
+async function loadChatSelect(){
+  const sel=document.getElementById('chatAgentSel');
+  const cur=sel.value;
+  try{ agents=await api('/api/agents'); }catch(e){}
+  sel.innerHTML=agents.map(a=>`<option value="${a.id}">${esc(a.name)}${a.status!=='running'?'（'+(a.status==='paused'?'暂停':'已归档')+'）':''}</option>`).join('');
+  if(cur && agents.some(a=>a.id===cur)) sel.value=cur;
+}
+function addMsgEl(role, text){
+  const box=document.getElementById('chatMsgs');
+  const d=document.createElement('div');
+  d.className='msg '+role;
+  d.innerHTML=`<div class="meta">${role==='user'?'你':'Agent'}</div>`;
+  const body=document.createElement('div');
+  body.style.whiteSpace='pre-wrap';
+  body.textContent=text;
+  d.appendChild(body);
+  box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+  return body;
+}
+function addToolEl(name,args,result){
+  const box=document.getElementById('chatMsgs');
+  const d=document.createElement('div');
+  d.className='tool-block';
+  d.innerHTML=`<span class="tool-name">🔧 ${esc(name)}</span>
+    <div class="tool-args">${esc(JSON.stringify(args))}</div>
+    <div class="tool-result">${esc(result||'执行中…')}</div>`;
+  box.appendChild(d);
+  box.scrollTop=box.scrollHeight;
+}
+async function loadChat(){
+  const id=document.getElementById('chatAgentSel').value;
+  const box=document.getElementById('chatMsgs');
+  if(!id){ box.innerHTML='<div class="empty">选择 Agent 开始对话</div>'; return; }
+  box.innerHTML='';
+  try{
+    const history=await api('/api/agents/'+id+'/chat');
+    history.forEach(h=>addMsgEl(h.role==='user'?'user':'assistant', h.content||''));
+    if(!history.length) box.innerHTML='<div class="empty">还没有对话，给 Agent 下达第一条指令吧</div>';
+  }catch(e){ box.innerHTML='<div class="empty">加载失败</div>'; }
+}
+async function sendChat(){
+  const id=document.getElementById('chatAgentSel').value;
+  const input=document.getElementById('chatInput');
+  const btn=document.getElementById('chatSendBtn');
+  const text=input.value.trim();
+  if(!id){ alert('请先选择 Agent'); return; }
+  if(!text){ return; }
+  input.value=''; btn.disabled=true;
+  addMsgEl('user', text);
+  const typing=addMsgEl('assistant','');
+  typing.classList.add('typing');
+  try{
+    const res=await fetch('/api/agents/'+id+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const reader=res.body.getReader();
+    const decoder=new TextDecoder();
+    let buf='';
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      buf+=decoder.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n\n'))>=0){
+        const raw=buf.slice(0,idx); buf=buf.slice(idx+2);
+        handleSSE(raw, typing);
+      }
+    }
+  }catch(e){
+    typing.classList.remove('typing');
+    typing.textContent='（对话失败：'+e.message+'）';
+  }
+  typing.classList.remove('typing');
+  btn.disabled=false;
+  loadAgents(); loadRanking();
+}
+function handleSSE(raw, typing){
+  const lines=raw.split('\n');
+  const type=lines.find(l=>l.startsWith('event: '))?.slice(7).trim();
+  const dataLine=lines.find(l=>l.startsWith('data: '));
+  let data={}; try{ if(dataLine) data=JSON.parse(dataLine.slice(6)); }catch(e){}
+  if(type==='token' && data.text){
+    typing.textContent=(typing.textContent||'')+data.text;
+    typing.closest('.chat-msgs').scrollTop=1e9;
+  }else if(type==='tool'){
+    addToolEl(data.name, data.args||{}, '');
+  }else if(type==='tool_result'){
+    const blocks=document.querySelectorAll('.tool-block');
+    const last=blocks[blocks.length-1];
+    if(last) last.querySelector('.tool-result').textContent=data.result||'';
+  }else if(type==='done'){
+    typing.textContent=data.text||'';
+  }else if(type==='error'){
+    typing.textContent='（'+data.error+'）';
+  }
+}
+
+// ============ 收益排名 ============
+async function loadRanking(){
+  let ranks=[];
+  try{ ranks=await api('/api/agents/ranking'); }catch(e){}
+  const tb=document.querySelector('#rankTable tbody');
+  tb.innerHTML=ranks.map((r,i)=>{
+    const ret=r.cumulative_return;
+    return `<tr>
+      <td>${i+1}</td>
+      <td><strong>${esc(r.name)}</strong></td>
+      <td><span class="badge ${r.status==='running'?'running':'paused'}">${r.status}</span></td>
+      <td>${ret===null||ret===undefined?'<span class="muted">—</span>':`<span class="badge ${ret>=0?'positive':'negative'}">${pct(ret)}</span>`}</td>
+      <td>${money(r.total_value)}</td>
+      <td>${r.positions_count||0}</td>
+      <td class="muted">${r.trade_date?esc(r.trade_date):'—'}</td></tr>`;
+  }).join('')||'<tr><td colspan="7"><div class="empty">暂无数据</div></td></tr>';
+  // 净值对比图
+  const withData=ranks.filter(r=>r.cumulative_return!==null&&r.cumulative_return!==undefined).slice(0,8);
+  if(withData.length){
+    const traces=await Promise.all(withData.map(async r=>{
+      const perf=await api('/api/agents/'+r.agent_id+'/performance').catch(()=>[]);
+      const start=perf[0]?.nav||100000;
+      return {x:(perf||[]).map(p=>p.trade_date), y:(perf||[]).map(p=>((p.nav/start-1)*100)), name:r.name, type:'scatter', mode:'lines'};
+    }));
+    Plotly.newPlot('rankChart', traces, {margin:{l:50,r:20,t:20,b:40},yaxis:{title:'累计收益 %'},legend:{orientation:'h'}},{displayModeBar:false});
+  }else{
+    document.getElementById('rankChart').innerHTML='<div class="empty">暂无收益数据</div>';
+  }
+}
+
+// ============ 系统配置 ============
+async function loadConfig(){
+  try{ configData=await api('/api/config'); }catch(e){ return; }
+  const groups={};
+  configData.schema.forEach(item=>{ (groups[item.category]=groups[item.category]||[]).push(item); });
+  const CAT=configData.category_names||{};
+  let html='';
+  Object.keys(groups).forEach(cat=>{
+    html+=`<div class="cfg-group"><h3>${CAT[cat]||cat}</h3>`;
+    groups[cat].forEach(item=>{
+      let control='';
+      if(item.key==='llm.default_provider'){
+        control=`<select id="cfg_${item.key}">${['deepseek','qwen','moonshot','glm','ollama','openai'].map(p=>`<option value="${p}" ${item.value===p?'selected':''}>${p}</option>`).join('')}</select>`;
+      }else if(item.options&&item.options.length){
+        const provider=item.key.split('.')[1].replace('_model','');
+        const known=item.options.includes(item.value);
+        control=`<div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
+          <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}">`;
+      }else{
+        control=`<input id="cfg_${item.key}" type="text" value="${esc(item.value)}" placeholder="${esc(item.default||'')}">`;
+      }
+      const tag=item.secret?'（敏感，留空保持原值）':'';
+      html+=`<div class="cfg-item"><label>${item.key} <span class="desc">- ${item.description}${tag}</span></label>${control}</div>`;
     });
-    html += '</div>';
+    html+='</div>';
   });
-  document.getElementById('configGroups').innerHTML = html;
+  document.getElementById('configGroups').innerHTML=html;
 }
-
-function modelSelectChanged(key) {
-  const sel = document.getElementById('cfg_' + key);
-  const input = document.getElementById('cfg_custom_' + key);
-  if (!sel || !input) return;
-  const custom = sel.value === '__custom__';
-  input.style.display = custom ? '' : 'none';
-  if (custom && !input.value) input.focus();
-}
-
-async function fetchRemoteModels(provider, key) {
-  const sel = document.getElementById('cfg_' + key);
-  const note = document.getElementById('cfg_note_' + key);
-  if (!sel || !note) return;
-  const btn = sel.parentElement?.querySelector('.cfg-refresh');
-  const prevText = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.className = 'cfg-refresh'; btn.textContent = '加载中…'; }
-  note.textContent = '';
-  try {
-    const res = await fetch('/api/llm/remote-models?provider=' + encodeURIComponent(provider));
-    const data = await res.json();
-    if (data.error) {
-      note.textContent = '获取失败：' + data.error;
-      if (btn) btn.className = 'cfg-refresh err';
-    } else {
-      const all = [...new Set([...(data.models || []), ...(data.preset || [])])];
-      if (!all.length) {
-        note.textContent = '服务器未返回任何模型';
-        if (btn) btn.className = 'cfg-refresh err';
-      } else {
-        const current = sel.value;
-        const known = current !== '__custom__' ? current : '';
-        if (known && !all.includes(known)) all.unshift(known);
-        sel.innerHTML = all.map(m =>
-          `<option value="${m}" ${m===known?'selected':''}>${m}</option>`).join('') +
-          `<option value="__custom__">自定义…</option>`;
-        const cnt = data.models ? data.models.length : 0;
-        note.textContent = cnt > 0 ? `已从服务器获取 ${cnt} 个模型` : '已合并预设模型列表';
-        if (btn) btn.className = 'cfg-refresh ok';
-      }
-    }
-  } catch (e) {
-    note.textContent = '请求失败：' + (e.message || e);
-    if (btn) btn.className = 'cfg-refresh err';
-  } finally {
-    if (btn) { btn.disabled = false; if (btn.className.indexOf('err') < 0 && btn.className.indexOf('ok') < 0) btn.textContent = prevText; }
-  }
-}
-
-async function saveConfig() {
-  const btn = document.getElementById('btnSaveConfig');
-  btn.disabled = true;
-  document.getElementById('configSaveInfo').textContent = '保存中...';
-  const updates = {};
-  (configData?.schema || []).forEach(item => {
-    const el = document.getElementById('cfg_' + item.key);
-    if (el) {
-      let v = el.value.trim();
-      if (v === '__custom__') {
-        const customEl = document.getElementById('cfg_custom_' + item.key);
-        v = customEl ? customEl.value.trim() : '';
-      }
-      updates[item.key] = v;
-    }
+async function saveConfig(){
+  const btn=document.getElementById('btnSaveConfig');
+  btn.disabled=true;
+  document.getElementById('configSaveInfo').textContent='保存中…';
+  const updates={};
+  (configData?.schema||[]).forEach(item=>{
+    const el=document.getElementById('cfg_'+item.key);
+    if(!el) return;
+    let v=el.value.trim();
+    if(v==='__custom__'){ const c=document.getElementById('cfg_custom_'+item.key); v=c?c.value.trim():''; }
+    updates[item.key]=v;
   });
-  try {
-    const r = await api('/api/config', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({updates})
-    });
-    document.getElementById('configSaveInfo').textContent = r.message;
-    await loadProviders();
-  } catch(e) {
-    document.getElementById('configSaveInfo').textContent = '保存失败: ' + e.message;
-  }
-  btn.disabled = false;
+  try{
+    const r=await api('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})});
+    document.getElementById('configSaveInfo').textContent=r.message||'已保存';
+  }catch(e){ document.getElementById('configSaveInfo').textContent='保存失败：'+e.message; }
+  btn.disabled=false;
 }
 
-async function testLLM() {
-  const el = document.getElementById('llmTestResult');
-  el.textContent = '测试中...';
-  try {
-    const p = await api('/api/llm/providers');
-    el.textContent = p.generator_available
-      ? `当前使用 ${p.generator_using}，模型可用`
-      : '当前无可用 LLM（降级为内置模板模式）';
-  } catch(e) { el.textContent = '测试失败: ' + e.message; }
+// ============ 初始化 ============
+async function init(){
+  loadAgents(); loadChatSelect();
+  try{ const h=await api('/api/health'); document.getElementById('sysInfo').textContent=`DB:${h.checks?.database?.status||'?'} · Redis:${h.checks?.redis?.status||'?'} · 运行中 Agent:${h.system?.active_agents||0}`; }catch(e){}
+  setInterval(async()=>{ try{ const h=await api('/api/health'); document.getElementById('sysInfo').textContent=`DB:${h.checks?.database?.status||'?'} · Redis:${h.checks?.redis?.status||'?'} · 运行中 Agent:${h.system?.active_agents||0}`; }catch(e){} },60000);
 }
-
-// ===================== 进化 =====================
-async function loadEvolutionHistory() {
-  try {
-    const rows = await api('/api/evolution/history?limit=20');
-    const el = document.getElementById('evolutionHistory');
-    if (!rows || rows.length === 0) { el.innerHTML = '<div class="loading">尚未执行进化</div>'; return; }
-    document.getElementById('evoCycles').textContent = rows.length;
-    document.getElementById('evoAdded').textContent = rows.reduce((s,r)=>s+(r.added||0),0);
-    document.getElementById('evoArena').textContent = rows[0].arena_size ?? '-';
-    el.innerHTML = '<table><thead><tr><th>周期</th><th>时间</th><th>淘汰</th><th>变异</th><th>杂交</th><th>新生</th><th>上线</th><th>竞技场</th></tr></thead><tbody>' +
-      rows.map(r => `<tr><td>#${r.cycle}</td><td>${(r.timestamp||'').slice(0,16)}</td><td>${r.eliminated??'-'}</td><td>${r.mutated??'-'}</td><td>${r.crossover??'-'}</td><td>${r.new??'-'}</td><td>${r.added??'-'}</td><td>${r.arena_size??'-'}</td></tr>`).join('') +
-      '</tbody></table>';
-  } catch(e) {}
-}
-
-async function triggerEvolution() {
-  const btn = document.getElementById('btnEvolve');
-  btn.disabled = true;
-  document.getElementById('evolveResult').textContent = '进化执行中（约1分钟）...';
-  try {
-    const r = await api('/api/evolution/trigger', {method:'POST'});
-    document.getElementById('evolveResult').textContent =
-      `完成: 淘汰${r.eliminated}, 变异${r.mutated}, 杂交${r.crossover}, 新生${r.new}, 上线${r.added}`;
-    await loadEvolutionHistory();
-    await loadLeaderboard(); await loadArenaStats(); await loadNavChart();
-  } catch(e) {
-    document.getElementById('evolveResult').textContent = '进化失败: ' + e.message;
-  }
-  btn.disabled = false;
-}
-
-// ===================== LLM badge =====================
-async function loadProviders() {
-  try {
-    const p = await api('/api/llm/providers');
-    const b = document.getElementById('providerBadge');
-    if (p.generator_available) {
-      b.className = 'badge active';
-      b.textContent = `${p.generator_using} / ${p.default_provider} 可用`;
-    } else {
-      b.className = 'badge negative';
-      b.textContent = 'LLM 未配置(降级模式)';
-    }
-  } catch(e) {}
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ===================== 初始化 =====================
-document.querySelectorAll('#tab-reports .btn.green').forEach(b => b.textContent = '生成' + TYPE_NAMES[currentReportType]);
-loadLeaderboard();
-loadArenaStats();
-loadNavChart();
-loadHealth();
-loadProviders();
-loadReportHistory();
+init();
 </script>
 </body>
 </html>

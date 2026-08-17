@@ -1,4 +1,4 @@
-"""Web 可视化面板：FastAPI 应用"""
+"""Web 可视化面板：FastAPI 应用（交易 Agent 体系）"""
 from __future__ import annotations
 
 import json
@@ -6,14 +6,14 @@ import secrets
 from datetime import date, datetime
 from decimal import Decimal
 
-import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response
+
+from src.core.config import config
+from src.web.context import AppContext
 
 
 class SafeJSONResponse(JSONResponse):
@@ -37,24 +37,22 @@ class SafeJSONResponse(JSONResponse):
             return float(o)
         raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
 
-from src.core.config import config
-from src.web.context import AppContext
 
-app = FastAPI(title="AI自主进化选股系统", version="1.0")
+app = FastAPI(title="AI 交易 Agent 系统", version="2.0")
 
 BASE_DIR = config.PROJECT_ROOT / "src" / "web"
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 # ---------------- 基础认证 ----------------
-# 页面与功能 API（配置/报告/进化/健康）免认证便于浏览器直接预览；
+# 页面与功能 API（Agent/配置/健康/市场查询）免认证便于浏览器直接预览；
 # 其余写操作仍需 Basic 认证。
 @app.middleware("http")
-async def require_auth(request: StarletteRequest, call_next):
+async def require_auth(request, call_next):
     if request.method == "GET":
         return await call_next(request)
     if request.url.path.startswith(
-        ("/api/config", "/api/reports", "/api/evolution", "/api/health")
+        ("/api/agents", "/api/config", "/api/llm", "/api/health", "/api/market")
     ):
         return await call_next(request)
     auth = request.headers.get("Authorization", "")
@@ -74,7 +72,7 @@ async def require_auth(request: StarletteRequest, call_next):
     return await call_next(request)
 
 
-def _unauthorized() -> Response:
+def _unauthorized() -> JSONResponse:
     return SafeJSONResponse(
         {"detail": "Unauthorized"},
         status_code=401,
@@ -86,75 +84,339 @@ def ctx() -> AppContext:
     return AppContext.get()
 
 
+def _sse(event: dict) -> str:
+    data = {k: v for k, v in event.items() if k != "type"}
+    return f"event: {event['type']}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
 # ---------------- 页面路由 ----------------
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    arena = ctx().arena
-    metrics = ctx().metrics
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
             "now": datetime.now(),
-            "provider": ctx().generator.client.name if ctx().generator else "unknown",
-            "provider_model": ctx().generator.client.model if ctx().generator else "",
-            "provider_available": ctx().generator.available if ctx().generator else False,
+            "default_provider": config.llm.default_provider,
         },
     )
 
 
-@app.get("/api/leaderboard")
-async def api_leaderboard(metric: str = "sharpe", limit: int = 20):
-    leaderboard = ctx().arena.get_leaderboard(metric=metric)
-    records = leaderboard.head(limit).to_dict("records")
-    # 日期等字段 JSON 序列化
-    return SafeJSONResponse(records)
+# ---------------- 市场查询 ----------------
+@app.get("/api/market/quote")
+async def api_market_quote(symbol: str):
+    from src.agent.tools import get_stock_quote
+
+    from src.agent.store import AgentStore
+    from src.agent.portfolio import AgentPortfolio
+
+    store = AgentStore()
+    portfolio = AgentPortfolio(None, store=store)
+    text = get_stock_quote(portfolio, store, {"symbol": symbol})
+    return SafeJSONResponse({"symbol": symbol, "text": text})
 
 
-@app.get("/api/arena/stats")
-async def api_arena_stats():
-    return SafeJSONResponse(ctx().arena.get_arena_stats())
+@app.get("/api/market/stocks")
+async def api_market_stocks(keyword: str = ""):
+    from sqlalchemy import text
 
+    from src.core.database import get_db_session
 
-@app.get("/api/strategy/{strategy_id}")
-async def api_strategy_detail(strategy_id: str):
-    strategy = ctx().arena.get_strategy(strategy_id)
-    if not strategy:
-        raise HTTPException(status_code=404, detail="not_found")
+    kw = f"%{keyword}%"
+    with get_db_session() as session:
+        rows = session.execute(
+            text(
+                "SELECT ts_code, symbol, name, industry FROM stock_basic "
+                "WHERE name ILIKE :kw OR ts_code ILIKE :kw OR symbol ILIKE :kw "
+                "ORDER BY ts_code LIMIT 30"
+            ),
+            {"kw": kw},
+        ).fetchall()
     return SafeJSONResponse(
-        {
-            "info": strategy.meta,
-            "stats": strategy.get_stats(),
-            "positions": strategy.get_positions_df().to_dict("records"),
-            "trades": strategy.get_trades_df().tail(50).to_dict("records"),
-            "nav_history": strategy.nav_history,
-        }
+        [{"ts_code": r[0], "symbol": r[1], "name": r[2], "industry": r[3]} for r in rows]
     )
 
 
-@app.get("/api/strategies")
-async def api_strategies():
-    arena = ctx().arena
-    records = []
-    for sid, s in arena.strategies.items():
-        records.append(
+# ---------------- Agent CRUD ----------------
+@app.get("/api/agents")
+async def api_agents():
+    store = ctx().store
+    agents = store.list_agents()
+    rank = store.rank_agents(limit=100)
+    rank_map = {r["agent_id"]: r for r in rank}
+    out = []
+    for a in agents:
+        r = rank_map.get(a.id, {})
+        out.append(
             {
-                "strategy_id": sid,
-                "name": s.name,
-                "type": s.meta.get("type", "hybrid"),
-                "generation": s.meta.get("generation", 0),
-                "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                "id": a.id,
+                "name": a.name,
+                "description": a.description,
+                "status": a.status,
+                "llm_provider": a.llm_provider,
+                "llm_model": a.llm_model,
+                "initial_capital": a.initial_capital,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+                "last_active_at": a.last_active_at.isoformat() if a.last_active_at else None,
+                "cumulative_return": r.get("cumulative_return"),
+                "total_value": r.get("total_value"),
+                "nav": r.get("nav"),
+                "positions_count": r.get("positions_count"),
+                "rank": r.get("rank"),
             }
         )
-    return SafeJSONResponse(records)
+    return SafeJSONResponse(out)
 
 
-@app.get("/api/benchmark")
-async def api_benchmark():
-    bench = ctx().arena.get_benchmark()
-    return SafeJSONResponse(bench.to_dict("records"))
+@app.post("/api/agents")
+async def api_agents_create(payload: dict):
+    store = ctx().store
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name 不能为空")
+    agent = store.create_agent(
+        name=name,
+        description=str(payload.get("description") or ""),
+        system_prompt=str(payload.get("system_prompt") or ""),
+        llm_provider=str(payload.get("llm_provider") or "deepseek"),
+        llm_api_key=str(payload.get("llm_api_key") or ""),
+        llm_base_url=str(payload.get("llm_base_url") or ""),
+        llm_model=str(payload.get("llm_model") or ""),
+        initial_capital=float(payload.get("initial_capital") or 100000),
+        max_position=int(payload.get("max_position") or 10),
+        single_stock_weight=float(payload.get("single_stock_weight") or 0.1),
+    )
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"agent": _agent_public(agent), "message": "Agent 创建成功"})
 
 
+@app.get("/api/agents/ranking")
+async def api_agents_ranking(limit: int = 50):
+    ranks = ctx().store.rank_agents(limit=limit)
+    for i, r in enumerate(ranks, start=1):
+        r["rank"] = i
+    return SafeJSONResponse(ranks)
+
+
+@app.get("/api/agents/{agent_id}")
+async def api_agent_detail(agent_id: str):
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    from src.agent.portfolio import AgentPortfolio
+
+    portfolio = AgentPortfolio(agent, store)
+    detail = _agent_public(agent)
+    detail["portfolio"] = portfolio.summary()
+    detail["memories"] = [
+        {"id": m.id, "content": m.content, "memory_type": m.memory_type,
+         "created_at": m.created_at.isoformat() if m.created_at else None}
+        for m in store.list_memories(agent_id)
+    ]
+    detail["tasks"] = [
+        {"id": t.id, "schedule_type": t.schedule_type, "schedule_time": t.schedule_time,
+         "interval_hours": t.interval_hours, "enabled": t.enabled,
+         "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None}
+        for t in store.list_tasks(agent_id)
+    ]
+    return SafeJSONResponse(detail)
+
+
+def _agent_public(agent):
+    return {
+        "id": agent.id,
+        "name": agent.name,
+        "description": agent.description,
+        "system_prompt": agent.system_prompt,
+        "status": agent.status,
+        "llm_provider": agent.llm_provider,
+        "llm_api_key": _mask(agent.llm_api_key),
+        "llm_base_url": agent.llm_base_url,
+        "llm_model": agent.llm_model,
+        "initial_capital": agent.initial_capital,
+        "current_cash": agent.current_cash,
+        "max_position": agent.max_position,
+        "single_stock_weight": agent.single_stock_weight,
+        "created_at": agent.created_at.isoformat() if agent.created_at else None,
+        "updated_at": agent.updated_at.isoformat() if agent.updated_at else None,
+        "last_active_at": agent.last_active_at.isoformat() if agent.last_active_at else None,
+    }
+
+
+def _mask(value: str) -> str:
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "****"
+    return value[:4] + "****" + value[-4:]
+
+
+@app.put("/api/agents/{agent_id}")
+async def api_agent_update(agent_id: str, payload: dict):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    fields = {}
+    for key in ("name", "description", "system_prompt", "llm_provider",
+                "llm_api_key", "llm_base_url", "llm_model", "status",
+                "max_position", "single_stock_weight"):
+        if key in payload:
+            val = payload[key]
+            if key == "llm_api_key" and isinstance(val, str) and "****" in val:
+                continue  # 打码值不覆盖
+            fields[key] = val
+    if "status" in fields and fields["status"] not in ("running", "paused", "archived"):
+        fields.pop("status")
+    agent = store.update_agent(agent_id, **fields)
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"agent": _agent_public(agent), "message": "Agent 已更新"})
+
+
+@app.delete("/api/agents/{agent_id}")
+async def api_agent_delete(agent_id: str):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    ok = store.delete_agent(agent_id)
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"deleted": ok, "message": "Agent 已删除"})
+
+
+@app.post("/api/agents/{agent_id}/run")
+async def api_agent_run(agent_id: str):
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    text = ctx().assistant.auto_run(agent)
+    return SafeJSONResponse({"text": text})
+
+
+# ---------------- Agent 数据查看 ----------------
+@app.get("/api/agents/{agent_id}/portfolio")
+async def api_agent_portfolio(agent_id: str):
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    from src.agent.portfolio import AgentPortfolio
+
+    return SafeJSONResponse(AgentPortfolio(agent, store).summary())
+
+
+@app.get("/api/agents/{agent_id}/performance")
+async def api_agent_performance(agent_id: str, limit: int = 120):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return SafeJSONResponse(store.list_performance(agent_id, limit=limit))
+
+
+@app.get("/api/agents/{agent_id}/trades")
+async def api_agent_trades(agent_id: str, limit: int = 100):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return SafeJSONResponse(store.list_trades(agent_id, limit=limit))
+
+
+@app.get("/api/agents/{agent_id}/memories")
+async def api_agent_memories(agent_id: str):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return SafeJSONResponse(
+        [
+            {"id": m.id, "content": m.content, "memory_type": m.memory_type,
+             "created_at": m.created_at.isoformat() if m.created_at else None}
+            for m in store.list_memories(agent_id)
+        ]
+    )
+
+
+@app.post("/api/agents/{agent_id}/memories")
+async def api_agent_memories_add(agent_id: str, payload: dict):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    content = str(payload.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content 不能为空")
+    item = store.add_memory(agent_id, content, memory_type=str(payload.get("memory_type") or "instruction"))
+    return SafeJSONResponse({"id": item.id, "content": item.content})
+
+
+# ---------------- Agent 对话（SSE 流式） ----------------
+@app.get("/api/agents/{agent_id}/chat")
+async def api_agent_chat_history(agent_id: str):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return SafeJSONResponse(store.list_chat(agent_id, limit=100))
+
+
+@app.post("/api/agents/{agent_id}/chat")
+async def api_agent_chat(agent_id: str, payload: dict):
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    message = str(payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message 不能为空")
+
+    def gen():
+        yield _sse({"type": "start", "agent": agent.name})
+        for event in ctx().assistant.run_stream(agent, message):
+            yield _sse(event)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+# ---------------- Agent 定时任务 ----------------
+@app.post("/api/agents/{agent_id}/tasks")
+async def api_agent_task_add(agent_id: str, payload: dict):
+    store = ctx().store
+    if not store.get_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    schedule_type = payload.get("schedule_type") or "daily"
+    task = store.add_task(
+        agent_id,
+        schedule_type=schedule_type,
+        schedule_time=str(payload.get("schedule_time") or "09:30"),
+        interval_hours=float(payload.get("interval_hours") or 0),
+        enabled=bool(payload.get("enabled", True)),
+    )
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"id": task.id, "message": "定时任务已创建"})
+
+
+@app.put("/api/agents/{agent_id}/tasks/{task_id}")
+async def api_agent_task_update(agent_id: str, task_id: int, payload: dict):
+    store = ctx().store
+    task = store.get_task(task_id)
+    if not task or task.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    fields = {k: v for k, v in payload.items()
+              if k in ("schedule_type", "schedule_time", "interval_hours", "enabled")}
+    store.update_task(task_id, **fields)
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"message": "定时任务已更新"})
+
+
+@app.delete("/api/agents/{agent_id}/tasks/{task_id}")
+async def api_agent_task_delete(agent_id: str, task_id: int):
+    store = ctx().store
+    task = store.get_task(task_id)
+    if not task or task.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    store.delete_task(task_id)
+    ctx().task_scheduler.sync_all()
+    return SafeJSONResponse({"message": "定时任务已删除"})
+
+
+# ---------------- 系统 ----------------
 @app.get("/api/health")
 async def api_health():
     health = ctx().metrics.health_check()
@@ -162,118 +424,18 @@ async def api_health():
     return SafeJSONResponse(health)
 
 
-@app.get("/api/system/metrics")
-async def api_system_metrics():
-    return SafeJSONResponse(ctx().metrics.collect_system_metrics().to_dict())
-
-
-@app.get("/api/evolution/history")
-async def api_evolution_history(limit: int = 20):
-    from sqlalchemy import text
-
-    from src.core.database import get_db_session
-
-    with get_db_session() as session:
-        rows = session.execute(
-            text(
-                """
-                SELECT cycle, timestamp, eliminated_count, mutated_count,
-                       crossover_count, new_count, added_count, arena_size
-                FROM evolution_log ORDER BY cycle DESC LIMIT :limit
-                """
-            ),
-            {"limit": limit},
-        ).fetchall()
-    return SafeJSONResponse(
-        [
-            {
-                "cycle": r[0],
-                "timestamp": r[1].isoformat() if r[1] else None,
-                "eliminated": r[2],
-                "mutated": r[3],
-                "crossover": r[4],
-                "new": r[5],
-                "added": r[6],
-                "arena_size": r[7],
-            }
-            for r in rows
-        ]
-    )
-
-
-@app.get("/api/backtest/{strategy_id}")
-async def api_backtest(strategy_id: str, days: int = 120):
-    """策略净值曲线（用于图表展示）"""
-    from sqlalchemy import text
-
-    from src.core.database import get_db_session
-
-    with get_db_session() as session:
-        rows = session.execute(
-            text(
-                """
-                SELECT trade_date, nav, cumulative_return FROM strategy_performance
-                WHERE strategy_id = :sid ORDER BY trade_date DESC LIMIT :days
-                """
-            ),
-            {"sid": strategy_id, "days": days},
-        ).fetchall()
-    rows = rows[::-1]
-    return SafeJSONResponse(
-        [
-            {
-                "date": r[0].isoformat() if r[0] else None,
-                "nav": r[1],
-                "cumulative_return": r[2],
-            }
-            for r in rows
-        ]
-    )
-
-
-@app.post("/api/evolution/trigger")
-async def api_trigger_evolution():
-    from src.core.config import setup_logging
-
-    summary = await ctx().evolution.evolve()
-    return SafeJSONResponse(summary)
-
-
-# ---------------- 报告 API ----------------
-@app.get("/api/reports")
-async def api_reports(report_type: str | None = None, limit: int = 20):
-    reporter = ctx().reporter
-    return SafeJSONResponse(reporter.history(report_type=report_type, limit=limit))
-
-
-@app.post("/api/reports/generate")
-async def api_reports_generate(report_type: str = "daily"):
-    if report_type not in ("daily", "weekly", "monthly"):
-        raise HTTPException(status_code=400, detail="report_type 必须为 daily/weekly/monthly")
-    report = ctx().reporter.generate_full_report(report_type, save=True)
-    latest = ctx().reporter.history(report_type=report_type, limit=1)
-    return SafeJSONResponse({"content": report, "latest": latest[0] if latest else None})
-
-
 @app.get("/api/llm/providers")
 async def api_llm_providers():
-    cfg = config.llm
-    providers = {}
-    for name, pc in cfg.providers.items():
-        providers[name] = {"available": pc.available, "model": pc.model}
     return SafeJSONResponse(
         {
-            "default_provider": cfg.default_provider,
-            "providers": providers,
-            "generator_using": ctx().generator.client.name if ctx().generator else "none",
-            "generator_available": ctx().generator.available if ctx().generator else False,
+            "default_provider": config.llm.default_provider,
+            "generator_using": "agent",
         }
     )
 
 
 @app.get("/api/llm/remote-models")
 async def api_llm_remote_models(provider: str = "deepseek"):
-    """从已配置服务器拉取全部可用模型（OpenAI 兼容 /models 或 Ollama /api/tags）"""
     from src.core.config_store import MODEL_OPTIONS, fetch_remote_models
 
     models, error = fetch_remote_models(provider)
@@ -296,14 +458,11 @@ async def api_config():
     return SafeJSONResponse(
         {
             "schema": store.describe_all(),
-            "categories": ["llm", "system", "data", "evolution", "strategy", "alert"],
+            "categories": ["llm", "system", "data"],
             "category_names": {
                 "llm": "大模型配置",
                 "system": "系统运行时间",
                 "data": "数据源",
-                "evolution": "进化与策略",
-                "strategy": "策略参数",
-                "alert": "告警阈值",
             },
         }
     )
@@ -312,12 +471,10 @@ async def api_config():
 @app.put("/api/config")
 async def api_config_save(payload: dict):
     from src.core.config_store import ConfigStore
-    from src.llm.factory import create_client
 
     updates = payload.get("updates", {})
     if not isinstance(updates, dict) or not updates:
         raise HTTPException(status_code=400, detail="updates 不能为空")
-    # 敏感字段（api_key/token）仅当以完整新值提交时更新；打码值被忽略
     cleaned = {}
     for key, value in updates.items():
         val = str(value).strip()
@@ -327,16 +484,14 @@ async def api_config_save(payload: dict):
             continue
         cleaned[key] = val
     n = ConfigStore().save(cleaned)
-    # LLM 配置即时生效：重建生成器客户端
-    if ctx().generator is not None:
-        ctx().generator.client = create_client()
     return SafeJSONResponse({"saved": n, "message": f"已保存 {n} 项配置"})
 
 
-def init_web_app(arena, evolution, metrics, report_generator):
+def init_web_app(store, assistant, task_scheduler, metrics, alert):
     """填充全局上下文（供 main.py 调用）"""
     ac = AppContext.get()
-    ac.arena = arena
-    ac.evolution = evolution
+    ac.store = store
+    ac.assistant = assistant
+    ac.task_scheduler = task_scheduler
     ac.metrics = metrics
-    ac.reporter = report_generator
+    ac.alert = alert

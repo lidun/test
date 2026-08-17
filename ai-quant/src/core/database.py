@@ -61,6 +61,14 @@ def init_database() -> None:
         return
     with engine.begin() as conn:
         conn.execute(text(schema_path.read_text(encoding="utf-8")))
+    # 迁移：清空旧体系（进化/策略自动生成/报告）遗留的表
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "DROP TABLE IF EXISTS evolution_log, strategy_performance, strategies, "
+                "factor_data, report_history CASCADE"
+            )
+        )
     # 兼容升级：为已存在的 daily_price 表补充估值列
     with engine.begin() as conn:
         for col, ctype in [
