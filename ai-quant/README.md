@@ -100,6 +100,20 @@ make backfill YEARS=1
 # 访问 http://服务器IP:8000
 ```
 
+> 国内服务器直连 Docker Hub 拉取镜像很慢时，在 `.env` 中设置 `REGISTRY_PREFIX` 使用国内镜像源：
+>
+> ```bash
+> REGISTRY_PREFIX=docker.m.daocloud.io/library
+> ```
+>
+> 常用国内前缀（任选一个，可先用 `docker pull <前缀>/busybox:latest` 验证可用性）：
+>
+> - `docker.m.daocloud.io/library`（DaoCloud，推荐）
+> - `docker.1panel.live/library`（1Panel）
+> - `docker.1ms.run/library`（毫秒镜像）
+>
+> 之后重新 `make build && make up` 即可。若你在阿里云 ECS 上，也可在 Docker 配置中启用阿里云镜像加速器，但注意非阿里云机器无法使用该加速。
+
 ## 目录结构
 
 ```
