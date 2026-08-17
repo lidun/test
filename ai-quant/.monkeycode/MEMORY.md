@@ -54,3 +54,11 @@ This file records user instructions, preferences, and teachings for reference in
   - DeepSeek thinking 模型（deepseek-v4-flash 等）：模型返回 tool_calls 后，工具执行回传消息必须带上 reasoning_content 字段，否则接口 400；providers.py _ChatMessage 需捕获该字段，assistant.py 构造回传消息时透传。
   - 前端 dashboard.html 内联 JS 校验：用 `sed -n '/<script>/,/<\/script>/p' | sed '1d;$d' > /tmp/x.js && node --check /tmp/x.js`；曾出现非 async 函数里用 await 导致整个 <script> 解析失败（页面完全无响应）的隐性 bug。
   - 记忆双写：add_memory 写 agent_memory 表并同步追加 data/agents/{id}/memory.md；文件存储目录 data/ 已被 gitignore，产出文件不入库、不提交。
+
+[Project Knowledge Summary]
+- Date: 2026-08-17
+- Context: Discovered by Agent while 为交易 Agent 接入腾讯 SkillHub 技能市场
+- Category: Environment Configuration
+- Instructions:
+  - SkillHub（skillhub.cn）公开 API 无需鉴权即可搜索/下载技能包：搜索 `GET https://api.skillhub.cn/api/skills?keyword=..&sortBy=score`（返回 skills 数组，含 slug/description_zh/category/downloads），下载 `GET https://api.skillhub.cn/api/v1/download?slug={slug}`（302→zip）。
+  - 技能安装到 `data/agents/{agent_id}/skills/{slug}/`（含 SKILL.md + scripts/），Agent 通过 search_skillhub / install_skill / read_skill 三个工具自主搜索与使用；需要第三方 API 密钥的技能由用户自行配置。
