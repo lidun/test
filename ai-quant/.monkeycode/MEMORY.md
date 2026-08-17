@@ -45,3 +45,12 @@ This file records user instructions, preferences, and teachings for reference in
   - 模拟回放：`python3 main.py --simulate 60`；Web：`python3 main.py --web`（0.0.0.0:8000，admin/admin123，Basic 认证，仅 /api/health 免认证）
   - 进化触发：`POST /api/evolution/trigger`（DeepSeek 变异/杂交，约 60s；LLM 失败自动降级内置模板）
   - 竞技场容量 20：淘汰末位后补新生，容量满时新策略被拒
+
+[Project Knowledge Summary]
+- Date: 2026-08-17
+- Context: Discovered by Agent while 实现 Agent 文件记忆、统筹总管与共享技能库（交易 Agent 系统重构）
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - DeepSeek thinking 模型（deepseek-v4-flash 等）：模型返回 tool_calls 后，工具执行回传消息必须带上 reasoning_content 字段，否则接口 400；providers.py _ChatMessage 需捕获该字段，assistant.py 构造回传消息时透传。
+  - 前端 dashboard.html 内联 JS 校验：用 `sed -n '/<script>/,/<\/script>/p' | sed '1d;$d' > /tmp/x.js && node --check /tmp/x.js`；曾出现非 async 函数里用 await 导致整个 <script> 解析失败（页面完全无响应）的隐性 bug。
+  - 记忆双写：add_memory 写 agent_memory 表并同步追加 data/agents/{id}/memory.md；文件存储目录 data/ 已被 gitignore，产出文件不入库、不提交。
