@@ -275,29 +275,39 @@ def os_getenv(name: str) -> str:
     return _os.getenv(name, "")
 
 
-def fetch_remote_models(provider: str, timeout: int = 15) -> tuple[list[str], str | None]:
+def fetch_remote_models(
+    provider: str, timeout: int = 15, base_url: str = "", api_key: str = ""
+) -> tuple[list[str], str | None]:
     """从已配置的服务器拉取全部可用模型
 
     返回 (模型id列表, 错误信息)。OpenAI 兼容端点用 /models；
     Ollama 用原生 /api/tags（自动去掉 base_url 的 /v1 后缀）。
+    传入 base_url/api_key 时优先使用（用于前端未保存时的即时拉取），
+    否则回退已保存配置。
     """
     cfg = ConfigStore().get_all()
-    base = (cfg.get(f"llm.{provider}_base_url", "") or "").strip().rstrip("/")
-    api_key = (cfg.get(f"llm.{provider}_api_key", "") or "").strip()
-    if not base:
+    if not base_url:
+        base_url = (cfg.get(f"llm.{provider}_base_url", "") or "").strip().rstrip("/")
+    else:
+        base_url = base_url.strip().rstrip("/")
+    if not api_key:
+        api_key = (cfg.get(f"llm.{provider}_api_key", "") or "").strip()
+    else:
+        api_key = api_key.strip()
+    if not base_url:
         return [], "该服务商未配置 Base URL"
     headers = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     try:
         if provider == "ollama":
-            root = base[: -len("/v1")] if base.endswith("/v1") else base
+            root = base_url[: -len("/v1")] if base_url.endswith("/v1") else base_url
             resp = requests.get(f"{root}/api/tags", timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
             models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
             return models, None
-        resp = requests.get(f"{base}/models", headers=headers, timeout=timeout)
+        resp = requests.get(f"{base_url}/models", headers=headers, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
         models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]

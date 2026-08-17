@@ -525,10 +525,14 @@ async def api_llm_providers():
 
 
 @app.get("/api/llm/remote-models")
-async def api_llm_remote_models(provider: str = "deepseek"):
+async def api_llm_remote_models(
+    provider: str = "deepseek", base_url: str = "", api_key: str = ""
+):
     from src.core.config_store import MODEL_OPTIONS, fetch_remote_models
 
-    models, error = fetch_remote_models(provider)
+    models, error = fetch_remote_models(
+        provider, base_url=base_url, api_key=api_key
+    )
     return SafeJSONResponse(
         {
             "provider": provider,

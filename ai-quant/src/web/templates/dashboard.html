@@ -869,7 +869,8 @@ function renderLlmGroup(items){
         const known=item.options.includes(item.value);
         html+=`<div class="cfg-item"><label>${label} <span class="desc">- ${item.description}${tag}</span></label>
           <div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
-          <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}"></div>`;
+          <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}">
+          <div class="cfg-model-actions"><button type="button" id="btn_rm_${p}" onclick="refreshRemoteModels('${p}')">获取在线模型</button><span id="rm_info_${p}" class="cfg-refresh-note"></span></div></div>`;
       }else{
         html+=`<div class="cfg-item"><label>${label} <span class="desc">- ${item.description}${tag}</span></label>
           <input id="cfg_${item.key}" type="${field==='api_key'?'password':'text'}" value="${esc(item.value)}" placeholder="${esc(item.default||'')}"></div>`;
@@ -888,6 +889,52 @@ function switchCfgProvider(p){
     const el=document.getElementById('cfg_prov_'+x);
     if(el) el.style.display=(x===p)?'':'none';
   });
+}
+
+async function refreshRemoteModels(p){
+  const btn=document.getElementById('btn_rm_'+p);
+  const info=document.getElementById('rm_info_'+p);
+  if(btn) btn.disabled=true;
+  if(info) info.textContent='获取中…';
+  try{
+    const bu=document.getElementById(`cfg_llm.${p}_base_url`);
+    const ak=document.getElementById(`cfg_llm.${p}_api_key`);
+    const q=new URLSearchParams({provider:p});
+    if(bu&&bu.value.trim()) q.set('base_url',bu.value.trim());
+    if(ak&&ak.value.trim()&&!ak.value.includes('****')) q.set('api_key',ak.value.trim());
+    const r=await api(`/api/llm/remote-models?${q.toString()}`);
+    if(r.error){
+      if(info) info.textContent='获取失败：'+r.error;
+      return;
+    }
+    const models=r.models||[];
+    if(!models.length){
+      if(info) info.textContent='该服务商未返回可用模型（请确认已保存 Base URL / API Key）';
+      return;
+    }
+    const key=`llm.${p}_model`;
+    const sel=document.getElementById('cfg_'+key);
+    if(sel){
+      const cur=sel.value;
+      const escO=m=>m.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+      sel.innerHTML=models.map(m=>`<option value="${escO(m)}">${escO(m)}</option>`).join('')+'<option value="__custom__">自定义…</option>';
+      const custom=document.getElementById('cfg_custom_'+key);
+      if(models.includes(cur)){
+        sel.value=cur;
+        if(custom){ custom.style.display='none'; }
+      }else if(cur==='__custom__'&&custom){
+        custom.style.display='';
+      }
+      if(custom&&custom.value){} 
+      if(info) info.textContent=`已获取 ${models.length} 个在线模型（可再点“自定义”手动填写）`;
+    }else{
+      if(info) info.textContent='模型选项尚未渲染，请先保存配置后重试';
+    }
+  }catch(e){
+    if(info) info.textContent='获取失败：'+e.message;
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 
 async function saveConfig(){
