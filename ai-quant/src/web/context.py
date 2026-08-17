@@ -49,6 +49,12 @@ class AppContext:
         self.alert = AlertManager()
         self.initialized = True
 
+        # 内置统筹 Agent（总管/系统记忆）
+        try:
+            self.store.ensure_system_agent()
+        except Exception as e:
+            logger.warning(f"统筹 Agent 初始化失败: {e}")
+
         # 无真实数据时生成演示行情，确保系统开箱可用
         try:
             from src.data.demo_data import ensure_demo_data

@@ -9,10 +9,13 @@ from datetime import date
 
 from sqlalchemy import text
 
-from src.agent.models import Agent, MemoryItem
+from src.agent.models import Agent
 from src.agent.portfolio import AgentPortfolio
+from src.agent.skills import SKILLS
 from src.agent.store import AgentStore
 from src.core.database import get_db_session
+
+skill_map = {s["id"]: s["name"] for s in SKILLS}
 
 
 def _num(v, nd=2):
@@ -158,6 +161,61 @@ TOOLS_SCHEMA: list[dict] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_all",
+            "description": "（统筹 Agent）汇总所有交易 Agent 的收益、持仓与风格，用于全局把控与对比",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_agent_detail",
+            "description": "查看指定 Agent 的详情（持仓、记忆、技能、最近成交），便于统筹/借鉴其他 Agent 的做法",
+            "parameters": {
+                "type": "object",
+                "properties": {"agent_id": {"type": "string", "description": "Agent 的 id"}},
+                "required": ["agent_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_note",
+            "description": "把研究成果、策略笔记或分析报告保存到自己的文件区（data/agents/目录），长期留存",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "文件名，如 茅台分析.md"},
+                    "content": {"type": "string", "description": "文件内容"},
+                },
+                "required": ["filename", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "列出自己文件区保存的笔记/报告文件",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "读取自己文件区里某个笔记/报告文件的内容",
+            "parameters": {
+                "type": "object",
+                "properties": {"filename": {"type": "string", "description": "文件名"}},
+                "required": ["filename"],
+            },
+        },
+    },
 ]
 
 # 不配置原生 function calling 时使用的文本协议说明（嵌入 system prompt）
@@ -165,7 +223,8 @@ TEXT_PROTOCOL_INSTRUCTION = """你可以通过输出 JSON 动作调用工具完�
 在回复末尾（或单独一行）输出一个 JSON 块：
 {"action": "工具名", "args": {"参数": "值"}}
 可用动作：get_stock_quote, search_stocks, get_stock_history, get_market_overview,
-get_factor_snapshot, get_portfolio, buy_stock, sell_stock, remember, recall_memory, get_ranking。
+get_factor_snapshot, get_portfolio, buy_stock, sell_stock, remember, recall_memory, get_ranking,
+summarize_all, get_agent_detail, save_note, list_files, read_file。
 一次只输出一个动作，执行结果会在下一轮告诉你。
 """
 
@@ -357,6 +416,97 @@ def get_ranking(portfolio, store: AgentStore, args) -> str:
     return "\n".join(lines)
 
 
+def summarize_all(portfolio, store: AgentStore, args) -> str:
+    """统筹 Agent：汇总全部 Agent 表现（收益、持仓、现金、风格）"""
+    ranks = store.rank_agents(limit=100)
+    if not ranks:
+        return "暂无 Agent 数据"
+    lines = ["【全局汇总】"]
+    for i, r in enumerate(ranks, start=1):
+        agent = store.get_agent(r["agent_id"])
+        skills = ", ".join(
+            skill_map.get(sid, sid) for sid in (agent.skill_list if agent else [])
+        ) or "默认"
+        ret = r["cumulative_return"]
+        ret_s = f"{ret*100:+.2f}%" if ret is not None else "暂无绩效"
+        lines.append(
+            f"#{i} {r['name']}: {ret_s} | 总资产 {_num(r['total_value'])} | "
+            f"持仓 {r['positions_count'] or 0} 只 | 技能[{skills}] | 状态 {r['status']}"
+        )
+    return "\n".join(lines)
+
+
+def get_agent_detail(portfolio, store: AgentStore, args) -> str:
+    """统筹/借鉴：查看指定 Agent 的持仓、记忆、技能与最近成交"""
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return "请提供 agent_id"
+    agent = store.get_agent(agent_id)
+    if not agent:
+        return f"未找到 Agent {agent_id}"
+    from src.agent.portfolio import AgentPortfolio
+
+    p = AgentPortfolio(agent, store)
+    summary = p.summary()
+    skills = ", ".join(
+        skill_map.get(sid, sid) for sid in agent.skill_list
+    ) or "默认"
+    mems = store.list_memories(agent.id, limit=5)
+    trades = store.list_trades(agent.id, limit=5)
+    lines = [
+        f"Agent「{agent.name}」({agent.id})",
+        f"定位: {agent.description or '-'} | 技能[{skills}] | 状态 {agent.status}",
+        f"账户: 现金 {summary['cash']:.2f} | 总资产 {summary['total_value']:.2f} | "
+        f"累计收益 {summary['cumulative_return']*100:+.2f}% | 持仓 {summary['positions_count']} 只",
+    ]
+    if summary["positions"]:
+        lines.append("持仓:")
+        for ps in summary["positions"]:
+            lines.append(
+                f"  - {ps['name']}({ps['ts_code']}) {ps['shares']}股 "
+                f"盈亏 {ps['pnl_pct']*100:+.2f}%"
+            )
+    if mems:
+        lines.append("记忆:")
+        lines += [f"  - {m.content[:120]}" for m in mems]
+    if trades:
+        lines.append("最近成交:")
+        lines += [
+            f"  - {t['trade_date']} {t['direction']} {t['ts_code']} "
+            f"{t['shares']}股 @{t['price']} ({t['reason'][:60]})"
+            for t in trades
+        ]
+    return "\n".join(lines)
+
+
+def save_note(portfolio, store: AgentStore, args) -> str:
+    filename = str(args.get("filename") or "").strip()
+    content = str(args.get("content") or "").strip()
+    if not content:
+        return "文件内容为空"
+    p = store.file_store.save_file(portfolio.agent.id, filename, content)
+    return f"已保存文件: {p.name}（{len(content)} 字符）"
+
+
+def list_files(portfolio, store: AgentStore, args) -> str:
+    files = store.file_store.list_files(portfolio.agent.id)
+    if not files:
+        return "文件区暂无文件"
+    return "\n".join(
+        f"- {f['name']}（{f['size']} 字节）" for f in files
+    )
+
+
+def read_file(portfolio, store: AgentStore, args) -> str:
+    filename = str(args.get("filename") or "").strip()
+    if not filename:
+        return "请提供文件名"
+    content = store.file_store.read_file(portfolio.agent.id, filename)
+    if content is None:
+        return f"文件 {filename} 不存在"
+    return content[:3000]
+
+
 # ---------------- 分发 ----------------
 
 def dispatch(portfolio: AgentPortfolio, store: AgentStore, name: str, args: dict) -> str:
@@ -381,6 +531,11 @@ _FUNCS = {
     "remember": remember,
     "recall_memory": recall_memory,
     "get_ranking": get_ranking,
+    "summarize_all": summarize_all,
+    "get_agent_detail": get_agent_detail,
+    "save_note": save_note,
+    "list_files": list_files,
+    "read_file": read_file,
 }
 
 

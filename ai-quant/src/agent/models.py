@@ -4,6 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# 内置统筹 Agent 固定 id
+OVERSEER_AGENT_ID = "system_overseer"
+
 
 @dataclass
 class Agent:
@@ -18,6 +21,8 @@ class Agent:
     llm_base_url: str = ""
     llm_model: str = ""
     status: str = "running"  # running/paused/archived
+    is_overseer: bool = False
+    skills: str = ""  # 逗号分隔的技能集
     initial_capital: float = 100000.0
     current_cash: float = 100000.0
     max_position: int = 10
@@ -32,6 +37,11 @@ class Agent:
     def llm_configured(self) -> bool:
         """是否配置了可用的 LLM（有 api_key 或 base_url/model 显式配置）"""
         return bool(self.llm_api_key) or bool(self.llm_base_url) or bool(self.llm_model)
+
+    @property
+    def skill_list(self) -> list[str]:
+        """解析后的技能列表"""
+        return [s.strip() for s in self.skills.split(",") if s.strip()]
 
 
 @dataclass

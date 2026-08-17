@@ -153,6 +153,8 @@ async def api_agents():
                 "name": a.name,
                 "description": a.description,
                 "status": a.status,
+                "is_overseer": a.is_overseer,
+                "skills": a.skills,
                 "llm_provider": a.llm_provider,
                 "llm_model": a.llm_model,
                 "initial_capital": a.initial_capital,
@@ -185,6 +187,7 @@ async def api_agents_create(payload: dict):
         initial_capital=float(payload.get("initial_capital") or 100000),
         max_position=int(payload.get("max_position") or 10),
         single_stock_weight=float(payload.get("single_stock_weight") or 0.1),
+        skills=str(payload.get("skills") or ""),
     )
     ctx().task_scheduler.sync_all()
     return SafeJSONResponse({"agent": _agent_public(agent), "message": "Agent 创建成功"})
@@ -220,7 +223,20 @@ async def api_agent_detail(agent_id: str):
          "last_run_at": t.last_run_at.isoformat() if t.last_run_at else None}
         for t in store.list_tasks(agent_id)
     ]
+    detail["files"] = store.file_store.list_files(agent_id)
     return SafeJSONResponse(detail)
+
+
+@app.get("/api/agents/{agent_id}/files/{filename}")
+async def api_agent_file(agent_id: str, filename: str):
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    content = store.file_store.read_file(agent_id, filename)
+    if content is None:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return SafeJSONResponse({"name": filename, "content": content})
 
 
 def _agent_public(agent):
@@ -230,6 +246,8 @@ def _agent_public(agent):
         "description": agent.description,
         "system_prompt": agent.system_prompt,
         "status": agent.status,
+        "is_overseer": agent.is_overseer,
+        "skills": agent.skills,
         "llm_provider": agent.llm_provider,
         "llm_api_key": _mask(agent.llm_api_key),
         "llm_base_url": agent.llm_base_url,
@@ -260,7 +278,7 @@ async def api_agent_update(agent_id: str, payload: dict):
     fields = {}
     for key in ("name", "description", "system_prompt", "llm_provider",
                 "llm_api_key", "llm_base_url", "llm_model", "status",
-                "max_position", "single_stock_weight"):
+                "max_position", "single_stock_weight", "skills"):
         if key in payload:
             val = payload[key]
             if key == "llm_api_key" and isinstance(val, str) and "****" in val:
@@ -280,7 +298,9 @@ async def api_agent_delete(agent_id: str):
         raise HTTPException(status_code=404, detail="Agent 不存在")
     ok = store.delete_agent(agent_id)
     ctx().task_scheduler.sync_all()
-    return SafeJSONResponse({"deleted": ok, "message": "Agent 已删除"})
+    if not ok:
+        raise HTTPException(status_code=400, detail="统筹 Agent 不允许删除")
+    return SafeJSONResponse({"deleted": True, "message": "Agent 已删除"})
 
 
 @app.post("/api/agents/{agent_id}/run")
@@ -447,6 +467,14 @@ async def api_llm_remote_models(provider: str = "deepseek"):
             "error": error,
         }
     )
+
+
+# ---------------- 共享技能库 ----------------
+@app.get("/api/skills")
+async def api_skills():
+    from src.agent.skills import all_skills_meta
+
+    return SafeJSONResponse(all_skills_meta())
 
 
 # ---------------- 系统配置 ----------------

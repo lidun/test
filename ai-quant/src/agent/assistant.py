@@ -15,6 +15,7 @@ from loguru import logger
 
 from src.agent.models import Agent
 from src.agent.portfolio import AgentPortfolio
+from src.agent.skills import build_skills_prompt
 from src.agent.store import AgentStore
 from src.agent.tools import (
     TEXT_PROTOCOL_INSTRUCTION,
@@ -65,12 +66,19 @@ class AgentAssistant:
             for p in account["positions"]
         ) or "- 空仓"
         mem_lines = "\n".join(f"- {m.content}" for m in mem) or "- 暂无长期记忆"
+        # 文件区记忆（memory.md 全文，双写备份）
+        file_mem = self.store.file_store.read_memory(agent.id, limit_chars=2000)
+        if file_mem:
+            mem_lines = mem_lines + "\n（文件记忆归档：）\n" + file_mem
         extra = "" if supports_tools else TEXT_PROTOCOL_INSTRUCTION
+        # 勾选的共享技能注入
+        skills_prompt = build_skills_prompt(agent.skill_list)
+        skills_block = f"\n\n{skills_prompt}\n" if skills_prompt else ""
         return f"""你是「{agent.name}」交易 Agent，运行在 A 股量化模拟交易沙盒中。
 当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}
 定位：{agent.description or '自主选股与模拟交易'}
 {agent.system_prompt or ''}
-
+{skills_block}
 —— 长期记忆（你曾记住的策略与偏好）——
 {mem_lines}
 

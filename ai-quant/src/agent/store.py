@@ -4,12 +4,20 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import date, datetime
+from pathlib import Path
 
 from loguru import logger
 from sqlalchemy import text
 
 from src.core.database import get_db_session
-from src.agent.models import Agent, AgentTask, MemoryItem, Position, Trade
+from src.agent.models import (
+    OVERSEER_AGENT_ID,
+    Agent,
+    AgentTask,
+    MemoryItem,
+    Position,
+    Trade,
+)
 
 
 def _agent_from_row(row) -> Agent:
@@ -23,28 +31,33 @@ def _agent_from_row(row) -> Agent:
         llm_base_url=row[6] or "",
         llm_model=row[7] or "",
         status=row[8] or "running",
-        initial_capital=float(row[9] or 0),
-        current_cash=float(row[10] or 0),
-        max_position=int(row[11] or 10),
-        single_stock_weight=float(row[12] or 0.1),
-        commission_rate=float(row[13] or 0.0003),
-        slippage=float(row[14] or 0.001),
-        created_at=row[15],
-        updated_at=row[16],
-        last_active_at=row[17],
+        is_overseer=bool(row[9] or False),
+        skills=row[10] or "",
+        initial_capital=float(row[11] or 0),
+        current_cash=float(row[12] or 0),
+        max_position=int(row[13] or 10),
+        single_stock_weight=float(row[14] or 0.1),
+        commission_rate=float(row[15] or 0.0003),
+        slippage=float(row[16] or 0.001),
+        created_at=row[17],
+        updated_at=row[18],
+        last_active_at=row[19],
     )
 
 
 _AGENT_COLUMNS = (
     "id, name, description, system_prompt, llm_provider, llm_api_key, "
-    "llm_base_url, llm_model, status, initial_capital, current_cash, "
-    "max_position, single_stock_weight, commission_rate, slippage, "
+    "llm_base_url, llm_model, status, is_overseer, skills, initial_capital, "
+    "current_cash, max_position, single_stock_weight, commission_rate, slippage, "
     "created_at, updated_at, last_active_at"
 )
 
 
 class AgentStore:
     # ---------------- Agent CRUD ----------------
+
+    def __init__(self):
+        self._file_store = None
 
     def create_agent(
         self,
@@ -58,17 +71,20 @@ class AgentStore:
         initial_capital: float = 100000.0,
         **kwargs,
     ) -> Agent:
-        agent_id = "agent_" + uuid.uuid4().hex[:10]
+        agent_id = kwargs.get("agent_id") or "agent_" + uuid.uuid4().hex[:10]
+        skills = kwargs.get("skills", "")
+        is_overseer = bool(kwargs.get("is_overseer", False))
         with get_db_session() as session:
             session.execute(
                 text(
                     f"""
                     INSERT INTO agent (id, name, description, system_prompt, llm_provider,
-                        llm_api_key, llm_base_url, llm_model, status, initial_capital, current_cash,
-                        max_position, single_stock_weight, commission_rate, slippage)
+                        llm_api_key, llm_base_url, llm_model, status, is_overseer, skills,
+                        initial_capital, current_cash, max_position, single_stock_weight,
+                        commission_rate, slippage)
                     VALUES (:id, :name, :description, :system_prompt, :llm_provider,
-                        :llm_api_key, :llm_base_url, :llm_model, 'running', :capital, :capital,
-                        :max_pos, :weight, :commission, :slippage)
+                        :llm_api_key, :llm_base_url, :llm_model, 'running', :overseer, :skills,
+                        :capital, :capital, :max_pos, :weight, :commission, :slippage)
                     """
                 ),
                 {
@@ -80,6 +96,8 @@ class AgentStore:
                     "llm_api_key": llm_api_key,
                     "llm_base_url": llm_base_url,
                     "llm_model": llm_model,
+                    "overseer": is_overseer,
+                    "skills": skills,
                     "capital": float(initial_capital),
                     "max_pos": int(kwargs.get("max_position", 10)),
                     "weight": float(kwargs.get("single_stock_weight", 0.1)),
@@ -90,6 +108,24 @@ class AgentStore:
         agent = self.get_agent(agent_id)
         logger.info(f"创建 Agent: {name} ({agent_id})")
         return agent
+
+    def ensure_system_agent(self) -> Agent:
+        """确保内置统筹 Agent 存在（不可删除，全局汇总与协作）"""
+        existing = self.get_agent(OVERSEER_AGENT_ID)
+        if existing:
+            return existing
+        from src.agent.skills import OVERSEER_PROMPT
+
+        return self.create_agent(
+            agent_id=OVERSEER_AGENT_ID,
+            name="统筹总管",
+            description="系统统筹 Agent：汇总对比各 Agent 表现，把控全局，协助各 Agent 模拟交易",
+            system_prompt=OVERSEER_PROMPT,
+            llm_provider="deepseek",
+            is_overseer=True,
+            skills="overseer",
+            initial_capital=100000.0,
+        )
 
     def get_agent(self, agent_id: str) -> Agent | None:
         with get_db_session() as session:
@@ -103,7 +139,7 @@ class AgentStore:
         sql = f"SELECT {_AGENT_COLUMNS} FROM agent"
         if not include_archived:
             sql += " WHERE status != 'archived'"
-        sql += " ORDER BY created_at"
+        sql += " ORDER BY is_overseer DESC, created_at"
         with get_db_session() as session:
             rows = session.execute(text(sql)).fetchall()
         return [_agent_from_row(r) for r in rows]
@@ -113,7 +149,7 @@ class AgentStore:
             "name", "description", "system_prompt", "llm_provider",
             "llm_api_key", "llm_base_url", "llm_model", "status",
             "max_position", "single_stock_weight", "commission_rate", "slippage",
-            "current_cash",
+            "current_cash", "skills",
         }
         sets = []
         params: dict = {"id": agent_id}
@@ -133,6 +169,9 @@ class AgentStore:
         return self.get_agent(agent_id)
 
     def delete_agent(self, agent_id: str) -> bool:
+        if agent_id == OVERSEER_AGENT_ID:
+            logger.warning("统筹 Agent 不允许删除")
+            return False
         with get_db_session() as session:
             session.execute(text("DELETE FROM agent_memory WHERE agent_id = :id"), {"id": agent_id})
             session.execute(text("DELETE FROM agent_chat WHERE agent_id = :id"), {"id": agent_id})
@@ -161,7 +200,18 @@ class AgentStore:
                 ),
                 {"aid": agent_id, "content": content, "type": memory_type},
             ).fetchone()
+        # 双写：同步追加到 Agent 专属记忆文件
+        try:
+            self.file_store.append_memory(agent_id, content)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"记忆文件写入失败: {e}")
         return MemoryItem(*row)
+
+    @property
+    def file_store(self) -> "AgentFileStore":
+        if self._file_store is None:
+            self._file_store = AgentFileStore()
+        return self._file_store
 
     def list_memories(self, agent_id: str, limit: int = 50) -> list[MemoryItem]:
         with get_db_session() as session:
@@ -456,3 +506,77 @@ class AgentStore:
         with get_db_session() as session:
             result = session.execute(text("DELETE FROM agent_task WHERE id = :tid"), {"tid": task_id})
         return result.rowcount > 0
+
+
+class AgentFileStore:
+    """Agent 专属文件存储：data/agents/{agent_id}/ 目录
+
+    - memory.md：长期记忆文件（追加式，与数据库 agent_memory 双写）
+    - 产出文件：对话/研究中保存的笔记、报告等
+    """
+
+    def __init__(self):
+        from src.core.config import config
+
+        self.root = config.DATA_DIR / "agents"
+
+    def dir_for(self, agent_id: str) -> Path:
+        d = self.root / agent_id
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def memory_file(self, agent_id: str) -> Path:
+        return self.dir_for(agent_id) / "memory.md"
+
+    # ---------------- 记忆文件 ----------------
+
+    def append_memory(self, agent_id: str, content: str) -> Path:
+        f = self.memory_file(agent_id)
+        entry = (
+            f"\n## {datetime.now().strftime('%Y-%m-%d %H:%M')}\n{content}\n"
+        )
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write(entry)
+        return f
+
+    def read_memory(self, agent_id: str, limit_chars: int = 4000) -> str:
+        f = self.memory_file(agent_id)
+        if not f.exists():
+            return ""
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        if len(text) > limit_chars:
+            text = "...(记忆较长，截断)...\n" + text[-limit_chars:]
+        return text
+
+    # ---------------- 产出文件 ----------------
+
+    def save_file(self, agent_id: str, filename: str, content: str) -> Path:
+        """保存 Agent 产出文件（文件名安全处理）"""
+        safe = filename.replace("/", "_").replace("\\", "_").strip()
+        if not safe:
+            safe = f"note_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
+        p = self.dir_for(agent_id) / safe
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def list_files(self, agent_id: str) -> list[dict]:
+        d = self.dir_for(agent_id)
+        out = []
+        for p in sorted(d.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if p.name.startswith("."):
+                continue
+            out.append(
+                {
+                    "name": p.name,
+                    "size": p.stat().st_size,
+                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).isoformat(),
+                }
+            )
+        return out
+
+    def read_file(self, agent_id: str, filename: str) -> str | None:
+        safe = filename.replace("/", "_").replace("\\", "_").strip()
+        p = self.dir_for(agent_id) / safe
+        if not p.exists() or not p.is_file():
+            return None
+        return p.read_text(encoding="utf-8", errors="ignore")
