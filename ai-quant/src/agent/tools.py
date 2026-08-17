@@ -217,7 +217,7 @@ TOOLS_SCHEMA: list[dict] = [
         "type": "function",
         "function": {
             "name": "search_skillhub",
-            "description": "在腾讯 SkillHub 技能市场搜索可用技能（如 PDF 处理、数据抓取、报告生成等），返回匹配技能的 slug、用途、下载量",
+            "description": "在腾讯 SkillHub 技能市场搜索可用技能（如 PDF 处理、数据抓取、报告生成等），返回匹配技能的 slug、用途、下载量；已过滤 ClawHub 来源，仅返回适合对话 Agent 使用的技能",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -548,7 +548,7 @@ def search_skillhub(portfolio, store: AgentStore, args) -> str:
         return f"SkillHub 搜索失败：{e}"
     if not items:
         return f"SkillHub 上未找到与「{keyword}」相关的技能，可换关键词重试"
-    lines = [f"SkillHub 搜索「{keyword}」共 {len(items)} 个结果："]
+    lines = [f"SkillHub 搜索「{keyword}」共 {len(items)} 个结果（已排除 ClawHub 来源，仅适用对话 Agent）："]
     for i, it in enumerate(items, start=1):
         lines.append(
             f"{i}. {it['name']}（slug: {it['slug']}）\n"

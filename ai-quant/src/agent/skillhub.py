@@ -25,15 +25,26 @@ class SkillHubError(Exception):
     pass
 
 
+# 技能来源：SkillHub 社区/企业技能（source=community，含 enterprise）；ClawHub 技能
+# 是独立来源池（source=clawhub），依赖 ClawHub 特定运行时，不适合本系统的对话 Agent。
+# 因此搜索固定 source=community，天然排除 ClawHub 技能。
+SEARCH_SOURCE = "community"
+
+
 def search_skills(keyword: str, limit: int = 5) -> list[dict]:
-    """在腾讯 SkillHub 搜索技能，返回精简字段列表"""
+    """在腾讯 SkillHub 搜索技能，返回精简字段列表（仅 SkillHub 社区/企业技能，排除 ClawHub）"""
     kw = (keyword or "").strip()
     if not kw:
         raise SkillHubError("搜索关键字不能为空")
     try:
         r = requests.get(
             f"{API_BASE}/api/skills",
-            params={"keyword": kw, "sortBy": "score", "pageSize": max(1, int(limit))},
+            params={
+                "keyword": kw,
+                "sortBy": "score",
+                "pageSize": max(1, int(limit)),
+                "source": SEARCH_SOURCE,
+            },
             timeout=SEARCH_TIMEOUT,
         )
         r.raise_for_status()
@@ -54,6 +65,7 @@ def search_skills(keyword: str, limit: int = 5) -> list[dict]:
                 "downloads": s.get("downloads", 0),
                 "tags": [t for t in (s.get("tags") or [])][:6],
                 "namespace": ns.get("canonicalName", ""),
+                "source": s.get("source", ""),
                 "requires_api_key": (s.get("labels") or {}).get("requires_api_key", "false"),
             }
         )
