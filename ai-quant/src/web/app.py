@@ -548,11 +548,13 @@ async def api_config():
     return SafeJSONResponse(
         {
             "schema": store.describe_all(),
-            "categories": ["llm", "system", "data"],
+            "categories": ["llm", "system", "data", "alert", "agent"],
             "category_names": {
                 "llm": "大模型配置",
                 "system": "系统运行时间",
                 "data": "数据源",
+                "alert": "告警",
+                "agent": "Agent 配置",
             },
         }
     )

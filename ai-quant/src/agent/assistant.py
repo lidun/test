@@ -70,10 +70,20 @@ class AgentAssistant:
         if file_mem:
             mem_lines = mem_lines + "\n（文件记忆归档：）\n" + file_mem
         extra = "" if supports_tools else TEXT_PROTOCOL_INSTRUCTION
+        # 自定义提示词：Agent 单独配置 > 系统配置的默认提示词 > 留空
+        custom = (agent.system_prompt or "").strip()
+        if not custom:
+            try:
+                from src.core.config_store import ConfigStore
+
+                custom = ConfigStore().get_all().get("agent.default_system_prompt", "").strip()
+            except Exception:
+                custom = ""
         return f"""你是「{agent.name}」交易 Agent，运行在 A 股量化模拟交易沙盒中。
 当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}
 定位：{agent.description or '自主选股与模拟交易'}
-{agent.system_prompt or ''}
+{custom}
+
 —— 长期记忆（你曾记住的策略与偏好）——
 {mem_lines}
 

@@ -211,7 +211,7 @@ tr:hover{background:#fafbfe}
     <h2 id="agentModalTitle">新建 Agent</h2>
     <div class="form-row"><label>名称 *</label><input id="f_name" placeholder="如：价值投资 Agent"></div>
     <div class="form-row"><label>定位描述</label><textarea id="f_description" placeholder="如：专注于低估值蓝筹股的价值投资"></textarea></div>
-    <div class="form-row"><label>系统提示词（可选，自定义行为）</label><textarea id="f_system_prompt" placeholder="可留空使用默认提示词"></textarea></div>
+    <div class="form-row" id="row_system_prompt" style="display:none"><label>系统提示词（可选，自定义行为；留空则使用系统配置的默认提示词）</label><textarea id="f_system_prompt" placeholder="留空则使用系统配置的默认提示词"></textarea></div>
     <div class="form-row"><label>大模型服务商</label>
       <select id="f_provider" onchange="providerChanged()">
         <option value="deepseek">DeepSeek</option>
@@ -595,6 +595,7 @@ let editingAgentId = null;
 function openAgentModal(id=null){
   editingAgentId = id;
   document.getElementById('agentModalTitle').textContent = id?'编辑 Agent':'新建 Agent';
+  document.getElementById('row_system_prompt').style.display = id?'':'none';
   const f=['f_name','f_description','f_system_prompt','f_provider','f_api_key','f_base_url','f_model','f_model_custom','f_capital'];
   f.forEach(x=>{const el=document.getElementById(x); if(x==='f_api_key'){el.value='';} });
   document.getElementById('f_model_note').textContent='';
@@ -817,6 +818,9 @@ async function loadConfig(){
         const known=item.options.includes(item.value);
         control=`<div class="cfg-model-row"><select id="cfg_${item.key}">${item.options.map(o=>`<option value="${o}" ${item.value===o?'selected':''}>${o}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义…</option></select></div>
           <input id="cfg_custom_${item.key}" type="text" style="display:${known?'none':''};margin-top:6px" placeholder="自定义模型名" value="${known?'':esc(item.value)}">`;
+      }else if(item.key==='agent.default_system_prompt'){
+        control=`<textarea id="cfg_${item.key}" style="min-height:160px;font-family:inherit">${esc(item.value)}</textarea>
+          <div class="cfg-refresh-note">Agent 未单独配置时使用；留空则用系统内置默认。</div>`;
       }else{
         control=`<input id="cfg_${item.key}" type="text" value="${esc(item.value)}" placeholder="${esc(item.default||'')}">`;
       }

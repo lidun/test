@@ -47,6 +47,8 @@ CONFIG_SCHEMA: list[tuple[str, str, str, str]] = [
     ("data.tushare_token", "data", "Tushare Token", ""),
     # ---- 告警 ----
     ("alert.max_drawdown", "alert", "最大回撤告警阈值 (负数)", "-0.20"),
+    # ---- Agent ----
+    ("agent.default_system_prompt", "agent", "Agent 默认系统提示词（Agent 未单独配置时使用；留空则用系统内置默认）", ""),
 ]
 
 _ENV_MAP: dict[str, str] = {
