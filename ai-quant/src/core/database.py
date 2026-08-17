@@ -12,10 +12,11 @@ from src.core.config import config
 
 engine = create_engine(
     config.db.url,
-    pool_size=20,
-    max_overflow=10,
+    # 2G 内存服务器适配：小连接池，避免每个 Postgres 后端进程占用大量内存
+    pool_size=3,
+    max_overflow=2,
     pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_recycle=1800,
     echo=False,
 )
 

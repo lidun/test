@@ -53,6 +53,7 @@ CONFIG_SCHEMA: list[tuple[str, str, str, str]] = [
     ("data.tushare_token", "data", "Tushare Token", ""),
     # ---- 进化与策略 ----
     ("evolution.cycle_days", "evolution", "进化周期(天)", "7"),
+    ("evolution.replay_days", "evolution", "启动回放交易日数 (降低可省内存)", "30"),
     ("evolution.elimination_rate", "evolution", "每轮淘汰比例 (0-1)", "0.20"),
     ("evolution.elite_count", "evolution", "精英保留数量", "3"),
     ("evolution.mutants_per_elite", "evolution", "每精英变异数", "2"),
@@ -92,6 +93,7 @@ _ENV_MAP: dict[str, str] = {
     "data.primary_provider": "PRIMARY_DATA_PROVIDER",
     "data.tushare_token": "TUSHARE_TOKEN",
     "evolution.cycle_days": "EVOLUTION_CYCLE_DAYS",
+    "evolution.replay_days": "EVOLUTION_REPLAY_DAYS",
     "evolution.elimination_rate": "EVOLUTION_ELIMINATION_RATE",
     "evolution.elite_count": "EVOLUTION_ELITE_COUNT",
     "evolution.mutants_per_elite": "EVOLUTION_MUTANTS_PER_ELITE",

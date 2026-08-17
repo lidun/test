@@ -87,12 +87,12 @@ class SimulationEngine:
 
         self._ensure_loaded()
 
-        # 因子数据缺失时按需计算（首次运行自动触发，批量回填90天）
+        # 因子数据缺失时按需计算（首次运行自动触发，批量回填30天）
         if self._need_factor_compute():
             try:
                 from src.factor.engine import FactorEngine
 
-                await FactorEngine().calculate_history(days=90)
+                await FactorEngine().calculate_history(days=30)
             except Exception as e:
                 logger.warning(f"按需因子计算失败: {e}")
 
@@ -261,6 +261,8 @@ class SimulationEngine:
             return pd.DataFrame(columns=["date", "nav"])
         closes = [float(r[1]) for r in rows]
         base = closes[0]
-        return pd.DataFrame(
-            [{"date": r[0], "nav": c / base} for r, c in zip(rows, closes)]
-        )
+        records = [
+            {"date": r[0], "nav": c / base} for r, c in zip(rows, closes)
+        ]
+        self.benchmark_nav = records
+        return pd.DataFrame(records)

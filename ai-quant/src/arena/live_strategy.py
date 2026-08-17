@@ -1,6 +1,7 @@
 """活跃策略：单策略在模拟环境中的运行实体"""
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -8,6 +9,10 @@ import numpy as np
 
 from src.core.config import config
 from src.strategy.schema import StrategyStatus
+
+# 内存上限：限制策略历史数据的无界增长，适配 2G 内存服务器
+MAX_NAV_HISTORY = 500
+MAX_TRADES = 1000
 
 
 @dataclass
@@ -49,8 +54,8 @@ class LiveStrategy:
         self.slippage = slippage or config.strategy.slippage
 
         self.positions: Dict[str, Position] = {}
-        self.trades: List[Trade] = []
-        self.nav_history: List[Dict] = []
+        self.trades: deque = deque(maxlen=MAX_TRADES)
+        self.nav_history: deque = deque(maxlen=MAX_NAV_HISTORY)
         self.stop_loss = strategy_meta.get("stop_loss", -0.08)
         self.stop_profit = strategy_meta.get("stop_profit", 0.30)
         self.max_position = strategy_meta.get("max_position", 10)
