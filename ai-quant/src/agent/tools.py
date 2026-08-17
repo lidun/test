@@ -11,11 +11,8 @@ from sqlalchemy import text
 
 from src.agent.models import Agent
 from src.agent.portfolio import AgentPortfolio
-from src.agent.skills import SKILLS
 from src.agent.store import AgentStore
 from src.core.database import get_db_session
-
-skill_map = {s["id"]: s["name"] for s in SKILLS}
 
 
 def _num(v, nd=2):
@@ -173,7 +170,7 @@ TOOLS_SCHEMA: list[dict] = [
         "type": "function",
         "function": {
             "name": "get_agent_detail",
-            "description": "查看指定 Agent 的详情（持仓、记忆、技能、最近成交），便于统筹/借鉴其他 Agent 的做法",
+            "description": "查看指定 Agent 的详情（持仓、记忆、最近成交），便于统筹/借鉴其他 Agent 的做法",
             "parameters": {
                 "type": "object",
                 "properties": {"agent_id": {"type": "string", "description": "Agent 的 id"}},
@@ -423,21 +420,17 @@ def summarize_all(portfolio, store: AgentStore, args) -> str:
         return "暂无 Agent 数据"
     lines = ["【全局汇总】"]
     for i, r in enumerate(ranks, start=1):
-        agent = store.get_agent(r["agent_id"])
-        skills = ", ".join(
-            skill_map.get(sid, sid) for sid in (agent.skill_list if agent else [])
-        ) or "默认"
         ret = r["cumulative_return"]
         ret_s = f"{ret*100:+.2f}%" if ret is not None else "暂无绩效"
         lines.append(
             f"#{i} {r['name']}: {ret_s} | 总资产 {_num(r['total_value'])} | "
-            f"持仓 {r['positions_count'] or 0} 只 | 技能[{skills}] | 状态 {r['status']}"
+            f"持仓 {r['positions_count'] or 0} 只 | 状态 {r['status']}"
         )
     return "\n".join(lines)
 
 
 def get_agent_detail(portfolio, store: AgentStore, args) -> str:
-    """统筹/借鉴：查看指定 Agent 的持仓、记忆、技能与最近成交"""
+    """统筹/借鉴：查看指定 Agent 的持仓、记忆与最近成交"""
     agent_id = str(args.get("agent_id") or "").strip()
     if not agent_id:
         return "请提供 agent_id"
@@ -448,14 +441,11 @@ def get_agent_detail(portfolio, store: AgentStore, args) -> str:
 
     p = AgentPortfolio(agent, store)
     summary = p.summary()
-    skills = ", ".join(
-        skill_map.get(sid, sid) for sid in agent.skill_list
-    ) or "默认"
     mems = store.list_memories(agent.id, limit=5)
     trades = store.list_trades(agent.id, limit=5)
     lines = [
         f"Agent「{agent.name}」({agent.id})",
-        f"定位: {agent.description or '-'} | 技能[{skills}] | 状态 {agent.status}",
+        f"定位: {agent.description or '-'} | 状态 {agent.status}",
         f"账户: 现金 {summary['cash']:.2f} | 总资产 {summary['total_value']:.2f} | "
         f"累计收益 {summary['cumulative_return']*100:+.2f}% | 持仓 {summary['positions_count']} 只",
     ]

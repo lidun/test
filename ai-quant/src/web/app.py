@@ -154,7 +154,6 @@ async def api_agents():
                 "description": a.description,
                 "status": a.status,
                 "is_overseer": a.is_overseer,
-                "skills": a.skills,
                 "llm_provider": a.llm_provider,
                 "llm_model": a.llm_model,
                 "initial_capital": a.initial_capital,
@@ -187,7 +186,6 @@ async def api_agents_create(payload: dict):
         initial_capital=float(payload.get("initial_capital") or 100000),
         max_position=int(payload.get("max_position") or 10),
         single_stock_weight=float(payload.get("single_stock_weight") or 0.1),
-        skills=str(payload.get("skills") or ""),
     )
     ctx().task_scheduler.sync_all()
     return SafeJSONResponse({"agent": _agent_public(agent), "message": "Agent 创建成功"})
@@ -247,7 +245,6 @@ def _agent_public(agent):
         "system_prompt": agent.system_prompt,
         "status": agent.status,
         "is_overseer": agent.is_overseer,
-        "skills": agent.skills,
         "llm_provider": agent.llm_provider,
         "llm_api_key": _mask(agent.llm_api_key),
         "llm_base_url": agent.llm_base_url,
@@ -278,7 +275,7 @@ async def api_agent_update(agent_id: str, payload: dict):
     fields = {}
     for key in ("name", "description", "system_prompt", "llm_provider",
                 "llm_api_key", "llm_base_url", "llm_model", "status",
-                "max_position", "single_stock_weight", "skills"):
+                "max_position", "single_stock_weight"):
         if key in payload:
             val = payload[key]
             if key == "llm_api_key" and isinstance(val, str) and "****" in val:
@@ -467,14 +464,6 @@ async def api_llm_remote_models(provider: str = "deepseek"):
             "error": error,
         }
     )
-
-
-# ---------------- 共享技能库 ----------------
-@app.get("/api/skills")
-async def api_skills():
-    from src.agent.skills import all_skills_meta
-
-    return SafeJSONResponse(all_skills_meta())
 
 
 # ---------------- 系统配置 ----------------

@@ -46,7 +46,6 @@ CREATE TABLE IF NOT EXISTS agent (
     llm_model VARCHAR(100) DEFAULT '',
     status VARCHAR(20) DEFAULT 'running',          -- running/paused/archived
     is_overseer BOOLEAN DEFAULT FALSE,             -- 统筹 Agent（总管）
-    skills TEXT DEFAULT '',                        -- 逗号分隔的技能集
     initial_capital DECIMAL(16,2) DEFAULT 100000,
     current_cash DECIMAL(16,2) DEFAULT 100000,
     max_position INTEGER DEFAULT 10,

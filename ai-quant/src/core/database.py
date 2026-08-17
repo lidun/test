@@ -81,17 +81,12 @@ def init_database() -> None:
                     f"ALTER TABLE daily_price ADD COLUMN IF NOT EXISTS {col} {ctype}"
                 )
             )
-    # 兼容升级：agent 表补充统筹标记与技能集列
+    # 兼容升级：agent 表补充统筹标记，并移除已废弃的技能集列
     with engine.begin() as conn:
-        for col, ctype, dflt in [
-            ("is_overseer", "BOOLEAN", "FALSE"),
-            ("skills", "TEXT", "''"),
-        ]:
-            conn.execute(
-                text(
-                    f"ALTER TABLE agent ADD COLUMN IF NOT EXISTS {col} {ctype} DEFAULT {dflt}"
-                )
-            )
+        conn.execute(
+            text("ALTER TABLE agent ADD COLUMN IF NOT EXISTS is_overseer BOOLEAN DEFAULT FALSE")
+        )
+        conn.execute(text("ALTER TABLE agent DROP COLUMN IF EXISTS skills"))
     logger.info("数据库表结构初始化完成")
 
 

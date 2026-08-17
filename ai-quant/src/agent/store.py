@@ -12,6 +12,7 @@ from sqlalchemy import text
 from src.core.database import get_db_session
 from src.agent.models import (
     OVERSEER_AGENT_ID,
+    OVERSEER_PROMPT,
     Agent,
     AgentTask,
     MemoryItem,
@@ -32,22 +33,21 @@ def _agent_from_row(row) -> Agent:
         llm_model=row[7] or "",
         status=row[8] or "running",
         is_overseer=bool(row[9] or False),
-        skills=row[10] or "",
-        initial_capital=float(row[11] or 0),
-        current_cash=float(row[12] or 0),
-        max_position=int(row[13] or 10),
-        single_stock_weight=float(row[14] or 0.1),
-        commission_rate=float(row[15] or 0.0003),
-        slippage=float(row[16] or 0.001),
-        created_at=row[17],
-        updated_at=row[18],
-        last_active_at=row[19],
+        initial_capital=float(row[10] or 0),
+        current_cash=float(row[11] or 0),
+        max_position=int(row[12] or 10),
+        single_stock_weight=float(row[13] or 0.1),
+        commission_rate=float(row[14] or 0.0003),
+        slippage=float(row[15] or 0.001),
+        created_at=row[16],
+        updated_at=row[17],
+        last_active_at=row[18],
     )
 
 
 _AGENT_COLUMNS = (
     "id, name, description, system_prompt, llm_provider, llm_api_key, "
-    "llm_base_url, llm_model, status, is_overseer, skills, initial_capital, "
+    "llm_base_url, llm_model, status, is_overseer, initial_capital, "
     "current_cash, max_position, single_stock_weight, commission_rate, slippage, "
     "created_at, updated_at, last_active_at"
 )
@@ -72,18 +72,17 @@ class AgentStore:
         **kwargs,
     ) -> Agent:
         agent_id = kwargs.get("agent_id") or "agent_" + uuid.uuid4().hex[:10]
-        skills = kwargs.get("skills", "")
         is_overseer = bool(kwargs.get("is_overseer", False))
         with get_db_session() as session:
             session.execute(
                 text(
                     f"""
                     INSERT INTO agent (id, name, description, system_prompt, llm_provider,
-                        llm_api_key, llm_base_url, llm_model, status, is_overseer, skills,
+                        llm_api_key, llm_base_url, llm_model, status, is_overseer,
                         initial_capital, current_cash, max_position, single_stock_weight,
                         commission_rate, slippage)
                     VALUES (:id, :name, :description, :system_prompt, :llm_provider,
-                        :llm_api_key, :llm_base_url, :llm_model, 'running', :overseer, :skills,
+                        :llm_api_key, :llm_base_url, :llm_model, 'running', :overseer,
                         :capital, :capital, :max_pos, :weight, :commission, :slippage)
                     """
                 ),
@@ -97,7 +96,6 @@ class AgentStore:
                     "llm_base_url": llm_base_url,
                     "llm_model": llm_model,
                     "overseer": is_overseer,
-                    "skills": skills,
                     "capital": float(initial_capital),
                     "max_pos": int(kwargs.get("max_position", 10)),
                     "weight": float(kwargs.get("single_stock_weight", 0.1)),
@@ -114,7 +112,6 @@ class AgentStore:
         existing = self.get_agent(OVERSEER_AGENT_ID)
         if existing:
             return existing
-        from src.agent.skills import OVERSEER_PROMPT
 
         return self.create_agent(
             agent_id=OVERSEER_AGENT_ID,
@@ -123,7 +120,6 @@ class AgentStore:
             system_prompt=OVERSEER_PROMPT,
             llm_provider="deepseek",
             is_overseer=True,
-            skills="overseer",
             initial_capital=100000.0,
         )
 
@@ -149,7 +145,7 @@ class AgentStore:
             "name", "description", "system_prompt", "llm_provider",
             "llm_api_key", "llm_base_url", "llm_model", "status",
             "max_position", "single_stock_weight", "commission_rate", "slippage",
-            "current_cash", "skills",
+            "current_cash",
         }
         sets = []
         params: dict = {"id": agent_id}
