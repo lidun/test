@@ -252,6 +252,64 @@ async def api_agent_skill(agent_id: str, slug: str):
     return SafeJSONResponse({"slug": slug, "content": md})
 
 
+@app.get("/api/skillhub/search")
+async def api_skillhub_search(keyword: str = "", limit: int = 20, category: str = ""):
+    """搜索 SkillHub 技能市场（已排除 ClawHub 来源），供前端技能面板调用"""
+    from src.agent import skillhub
+
+    kw = (keyword or "").strip() or "热门"
+    try:
+        items = skillhub.search_skills(kw, limit=max(1, min(50, int(limit))), category=category)
+    except skillhub.SkillHubError as e:
+        return SafeJSONResponse({"items": [], "error": str(e)})
+    return SafeJSONResponse({"items": items})
+
+
+@app.post("/api/agents/{agent_id}/skills")
+async def api_agent_skill_install(agent_id: str, payload: dict):
+    """为 Agent 安装一个 SkillHub 技能，返回安装后的技能列表"""
+    from src.agent import skillhub
+
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    slug = str((payload or {}).get("slug") or "").strip()
+    if not slug:
+        raise HTTPException(status_code=400, detail="缺少技能 slug")
+    try:
+        res = skillhub.install_skill(slug, store.file_store.skills_dir(agent_id))
+    except skillhub.SkillHubError as e:
+        raise HTTPException(status_code=400, detail=f"技能安装失败：{e}")
+    return SafeJSONResponse(
+        {
+            "slug": res["slug"],
+            "files": res["files"],
+            "skills": store.file_store.list_installed_skills(agent_id),
+            "message": f"技能 {res['slug']} 已安装",
+        }
+    )
+
+
+@app.delete("/api/agents/{agent_id}/skills/{slug}")
+async def api_agent_skill_remove(agent_id: str, slug: str):
+    """卸载 Agent 的某个技能"""
+    store = ctx().store
+    agent = store.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    ok = store.file_store.remove_skill(agent_id, slug)
+    if not ok:
+        raise HTTPException(status_code=404, detail="技能未安装")
+    return SafeJSONResponse(
+        {
+            "slug": slug,
+            "skills": store.file_store.list_installed_skills(agent_id),
+            "message": f"技能 {slug} 已卸载",
+        }
+    )
+
+
 def _agent_public(agent):
     return {
         "id": agent.id,

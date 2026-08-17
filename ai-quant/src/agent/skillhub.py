@@ -31,20 +31,24 @@ class SkillHubError(Exception):
 SEARCH_SOURCE = "community"
 
 
-def search_skills(keyword: str, limit: int = 5) -> list[dict]:
+def search_skills(keyword: str, limit: int = 5, category: str = "") -> list[dict]:
     """在腾讯 SkillHub 搜索技能，返回精简字段列表（仅 SkillHub 社区/企业技能，排除 ClawHub）"""
     kw = (keyword or "").strip()
     if not kw:
         raise SkillHubError("搜索关键字不能为空")
+    params = {
+        "keyword": kw,
+        "sortBy": "score",
+        "pageSize": max(1, int(limit)),
+        "source": SEARCH_SOURCE,
+    }
+    cat = (category or "").strip()
+    if cat:
+        params["category"] = cat
     try:
         r = requests.get(
             f"{API_BASE}/api/skills",
-            params={
-                "keyword": kw,
-                "sortBy": "score",
-                "pageSize": max(1, int(limit)),
-                "source": SEARCH_SOURCE,
-            },
+            params=params,
             timeout=SEARCH_TIMEOUT,
         )
         r.raise_for_status()
@@ -63,6 +67,7 @@ def search_skills(keyword: str, limit: int = 5) -> list[dict]:
                 "description": s.get("description_zh") or s.get("description") or "",
                 "category": s.get("category", ""),
                 "downloads": s.get("downloads", 0),
+                "icon": s.get("iconUrl") or "",
                 "tags": [t for t in (s.get("tags") or [])][:6],
                 "namespace": ns.get("canonicalName", ""),
                 "source": s.get("source", ""),

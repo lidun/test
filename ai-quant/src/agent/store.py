@@ -548,6 +548,16 @@ class AgentFileStore:
             )
         return out
 
+    def remove_skill(self, agent_id: str, slug: str) -> bool:
+        """卸载 Agent 的某个技能（删除对应目录），不存在返回 False"""
+        import shutil
+
+        d = self.dir_for(agent_id) / "skills" / slug.replace("/", "_").replace("\\", "_")
+        if not d.exists():
+            return False
+        shutil.rmtree(d, ignore_errors=True)
+        return True
+
     # ---------------- 记忆文件 ----------------
 
     def append_memory(self, agent_id: str, content: str) -> Path:
