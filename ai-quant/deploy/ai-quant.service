@@ -1,0 +1,25 @@
+[Unit]
+Description=AI Quant System
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+# 将 /opt/ai-quant 替换为实际部署目录
+WorkingDirectory=/opt/ai-quant
+# 将 venv 替换为实际虚拟环境路径
+ExecStart=/opt/ai-quant/venv/bin/python main.py --web
+Restart=on-failure
+RestartSec=5
+
+# ---- 2G 内存服务器资源限制 ----
+# Python 进程硬内存上限：超限即被 OOM Killer 终止（系统自动重启）
+MemoryMax=700M
+# 软内存阈值：超过后系统尽力回收，避免直接 OOM
+MemoryHigh=600M
+# 文件描述符上限
+LimitNOFILE=4096
+# CPU 上限（2 核留 1 核给数据库/系统）
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

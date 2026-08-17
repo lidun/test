@@ -1,0 +1,6 @@
+# Redis 2G 内存服务器建议配置
+# 用法：在 /etc/redis/redis.conf 中取消注释/设置，然后重启：
+#   sudo systemctl restart redis-server
+
+maxmemory 128mb
+maxmemory-policy allkeys-lru

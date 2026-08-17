@@ -1,0 +1,14 @@
+# PostgreSQL 2G 内存服务器建议配置
+# 用法：将以下内容追加到 postgresql.conf 末尾，然后重启：
+#   sudo systemctl restart postgresql
+# 适用于 2 核 2G / 2 核 4G 内存的云服务器。
+
+shared_buffers = 128MB          # 内核缓冲，约总内存 6%
+effective_cache_size = 512MB    # 供查询规划器估算（非实际分配）
+work_mem = 4MB                  # 单次排序/哈希内存上限，防止大排序吃内存
+maintenance_work_mem = 32MB     # VACUUM / 建索引时使用
+max_connections = 30            # 每连接约 2-5MB，2G 环境不宜超过 50
+wal_buffers = 4MB
+max_worker_processes = 2        # 后台并行 worker 数量
+max_parallel_workers = 2
+autovacuum_max_workers = 2      # 自动清理进程数
